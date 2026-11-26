@@ -227,3 +227,14 @@ The reviewer then found four cases that the fixes did not cover: a borrow kept t
 RFC 0005 records the corrections, and lists under "Still for the owner" the choices in them that were this RFC's: that loans made by a pattern leave no fact about the elements; that a type with such a proof field in a cut field is rejected, where cutting only the references that close the cycle would keep it; and that one kind of proof has no form in source, where letting a body write `final!` inside a proof would give it one.
 
 The reviewer's last read found no new route to a contradiction. It read the documents; no compiler runs them.
+
+### 2026-11-26, owner I07a decision and PR #26
+
+The owner adopted extensional `===` for pure logical functions, obtained by an
+explicit theorem application from pointwise `===`, and requested the record and
+PR update. RFC 0002 decision 127 and RFC 0003 specify
+`eq::funext(f, g, pointwise)`. This adds no search procedure, equality reflection,
+or equality of runtime functions. The kernel theorem and lowering validation
+remain [function-extensionality-kernel](function-extensionality-kernel.md)'s work
+under the existing Lean-logic foundation. I07b's finite `Map` representation and
+enumeration remain undecided.

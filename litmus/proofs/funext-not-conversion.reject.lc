@@ -1,0 +1,11 @@
+//~ question: Does pointwise evidence make two distinct logical function parameters definitionally convertible?
+//~ spec: proofs.equality.funext, core.conversion, proofs.procedures.compute
+//~ rfc: 0003
+
+logic fn not_by_computation<A: Logical, B: Logical>(
+    f: logic fn(A) -> B,
+    g: logic fn(A) -> B,
+    pointwise: @(forall |x: A| f(x) === g(x)),
+) -> @(f === g) {
+    compute() //~ error: f and g do not convert; compute uses no pointwise proof
+}

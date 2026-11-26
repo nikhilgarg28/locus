@@ -131,7 +131,7 @@ r[logic.fn.parameters]
 Each parameter of a logic function has a logical type, which `Snap<T>` and the result type of an explicit view are. A parameter written with a runtime type, such as `xs: &[u32]`, or `self` in an `impl` of a runtime type, is rejected. A runtime place given as an argument is its capture ([`models.observation`](models.md#models)), whatever the type of the parameter, and `snap(x)` gives its snapshot. A type parameter of a logic function ranges over logical types, unless it is bounded by `Snapshot`: it then stands for any type that has a snapshot, a runtime type or a logical one ([`models.snapshots.seen`](models.md#snapshots)), of which the function names `Snap<T>`, and takes no value of type `T` itself.
 
 r[logic.eq.same]
-`a === b` is the proposition that the logical values `a` and `b` are equal, and `a !== b` its negation. Every logical type has it, and it cannot be overloaded.
+`a === b` is the proposition that the logical values `a` and `b` are equal, and `a !== b` its negation. Every logical type has it, and it cannot be overloaded. On pure logical function values it is extensional: pointwise `===` at every argument yields function `===` through the explicit theorem [`proofs.equality.funext`](proofs.md#constructing-proofs).
 
 r[logic.eq.runtime-values]
 On runtime places, `a === b` compares their snapshots. No view is applied; adding a view changes no equality. Explicitly comparing view results gives only that chosen abstraction's equality, not equality of its input snapshots.

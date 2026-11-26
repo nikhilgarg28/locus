@@ -1,0 +1,11 @@
+//~ question: Does a proof hole automatically invoke function extensionality on pointwise evidence?
+//~ spec: proofs.equality.funext, proofs.holes
+//~ rfc: 0003
+
+logic fn missing_call<A: Logical, B: Logical>(
+    f: logic fn(A) -> B,
+    g: logic fn(A) -> B,
+    pointwise: @(forall |x: A| f(x) === g(x)),
+) -> @(f === g) {
+    _ //~ error: the hole does not apply funext; call eq::funext(f, g, pointwise)
+}

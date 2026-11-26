@@ -1,0 +1,13 @@
+//~ question: May an arbitrary pure logical observer distinguish functions proved extensionally equal?
+//~ spec: proofs.equality.funext, proofs.equality
+//~ rfc: 0003
+
+// It may not: the result is the ordinary, substitutive ===.
+logic fn same_observation<A: Logical, B: Logical, C: Logical>(
+    f: logic fn(A) -> B,
+    g: logic fn(A) -> B,
+    observe: logic fn(logic fn(A) -> B) -> C,
+    pointwise: @(forall |x: A| f(x) === g(x)),
+) -> @(observe(f) === observe(g)) {
+    eq::congr(observe, eq::funext(f, g, pointwise))
+}

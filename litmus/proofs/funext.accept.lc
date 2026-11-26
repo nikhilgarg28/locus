@@ -1,0 +1,11 @@
+//~ question: Does explicit function extensionality turn pointwise sameness at every input into function sameness?
+//~ spec: proofs.equality.funext, logic.eq.same, proofs.forall
+//~ rfc: 0003
+
+logic fn same_functions<A: Logical, B: Logical>(
+    f: logic fn(A) -> B,
+    g: logic fn(A) -> B,
+    pointwise: @(forall |x: A| f(x) === g(x)),
+) -> @(f === g) {
+    eq::funext(f, g, pointwise)
+}

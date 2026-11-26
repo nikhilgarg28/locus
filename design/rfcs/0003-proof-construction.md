@@ -138,6 +138,45 @@ Whatever a procedure or a hole finds is a term built from the forms and function
 - **Polynomial identities,** `ring`, which the owner left out for now; a multiplication law is a lemma.
 - **The macros `calc!`, `rewrite!`, `fold!`, and `unfold!`,** which earlier drafts had sketched. The functions above take their place.
 
+### Functional extensionality
+
+RFC 0002 decision 127 adopts extensional sameness for pure logical functions.
+The explicit API fits the existing equality module:
+
+```rust
+pub logic fn funext<A: Logical, B: Logical>(
+    f: logic fn(A) -> B,
+    g: logic fn(A) -> B,
+    pointwise: @(forall |x: A| f(x) === g(x)),
+) -> @(f === g);
+// Called as eq::funext(f, g, pointwise).
+```
+
+This is a library theorem signature, not an unchecked declaration a program may
+add. Its type parameters have the stated `Logical` bounds; whether `!` meets
+those bounds remains the I06 lowering/kind gate. A caller supplies the proof at
+every input. Equality at one input, a finite
+sample, or a restricted domain does not suffice; nor does an overridable relation
+on the outputs. The result is the existing `===`: it can be passed to `eq::congr`
+and used to rewrite, including under a higher-order logical observer. Ordinary
+congruence gives the converse, equal functions have equal outputs.
+
+The theorem does not make function equality definitionally decidable. A bare
+`compute()` does not use a pointwise proof, and neither `linear` nor `_` calls
+`funext` automatically. Logical closures obey this rule as logical functions;
+runtime closures and function pointers gain no new equality or effect law.
+
+The trust baseline already names Lean 4's type theory with propositional
+extensionality, quotients and classical choice (`assumed.lean`). Lean derives
+functional extensionality in that foundation. Locus must supply and kernel-check
+the corresponding theorem or a faithful checked realization under that baseline,
+with its dependencies recorded. This is not an independent `funext` axiom or an
+`unsafe assume!` adapter. The backend and proof import/encoding remain explicit
+work in [function-extensionality-kernel](../../issues/function-extensionality-kernel.md);
+no kernel execution is claimed here. Choosing a weaker foundation would require
+revisiting its ability to realize this adopted theorem, not silently trusting it.
+Finite `Map` representation and enumeration remain separate, unresolved choices.
+
 ### Empty cases in logical data definitions
 
 RFC 0002 decision 126 admits the library function
@@ -162,6 +201,7 @@ The rules below go into [Propositions and proofs](../../spec/proofs.md).
 | `proofs.procedures.linear` | `proofs/data-constructors-are-distinct.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-from-branch-and-arithmetic.accept.lc`, `proofs/linear-with-division.accept.lc`, `proofs/procedure-given-its-facts.accept.lc`, `proofs/hole-needs-a-lemma.reject.lc`, `proofs/linear-product-of-variables.reject.lc`, `proofs/proof-constructors-are-not-distinct.reject.lc` |
 | `proofs.procedures.expand` | `contracts/final-value-by-the-goal.accept.lc`, `proofs/equality-chain-as-term.accept.lc`, `proofs/equality-chain-by-procedure.accept.lc`, `proofs/hole-written-out-with-an-earlier-value.accept.lc` |
 | `proofs.equality` | `core/congruence-at-the-snapshot.accept.lc`, `proofs/equality-chain-as-term.accept.lc`, `proofs/rewrite-with-equality.accept.lc`, `core/congruence-through-a-model.reject.lc`, `core/rewrite-misses-a-field-read.reject.lc`, `proofs/equality-chain-mismatched.reject.lc`, `proofs/reflexivity-of-two-values.reject.lc` |
+| `proofs.equality.funext` | `proofs/funext.accept.lc`, `proofs/funext-through-observer.accept.lc`, `proofs/funext-logical-closures.accept.lc`, `proofs/funext-at-one-input.reject.lc`, `proofs/funext-output-relation.reject.lc`, `proofs/funext-not-a-hole-rule.reject.lc`, `proofs/funext-not-conversion.reject.lc`, `proofs/funext-runtime-function.reject.lc` |
 | `proofs.unfold` | `proofs/unfold-logic-function.accept.lc`, `proofs/unfold-declared-proposition.reject.lc`, `proofs/unfold-private-body.reject.lc` |
 | `proofs.values.inferred` | `contracts/final-value-by-the-goal.accept.lc`, `contracts/lemma-at-a-final-value.accept.lc`, `proofs/inferred-value-from-the-goal.accept.lc`, `proofs/inferred-values.accept.lc`, `contracts/final-value-recovered-by-inference.reject.lc`, `proofs/inferred-value-determined-twice.reject.lc`, `proofs/inferred-value-from-a-procedure.reject.lc`, `proofs/inferred-value-undetermined.reject.lc`, `proofs/reflexivity-of-two-values.reject.lc` |
 | `proofs.facts.named` | `proofs/named-condition.accept.lc`, `runtime/named-sum-as-checked.accept.lc`, `proofs/named-condition-after-branch.reject.lc`, `runtime/named-sum-may-wrap.reject.lc` |
@@ -177,7 +217,7 @@ The rules below go into [Propositions and proofs](../../spec/proofs.md).
 | Erasure and runtime behavior | None. Every form here is logical code and is erased. `if h: c` runs as `if c`. |
 | Rust interoperability | `if h: c` is new syntax, which rustc rejects. `compute`, `linear`, and `eq` are names of Locus's library, which a program's own definitions shadow, as RFC 0001 says of every Locus name. |
 | Diagnostics | A failed hole or procedure reports the proposition required and the proofs it was given or found in scope; `linear` adds values for which the goal fails. The forms for asking for that report are [proof-debugging](../../issues/proof-debugging.md). |
-| Trust model | None added. A procedure's result is a term that the kernel checks, so no procedure is trusted (`trusted.kernel`). |
+| Trust model | No new axiom or trust category. A procedure's result is a term that the kernel checks, so no procedure is trusted (`trusted.kernel`). `eq::funext` must be realized as a checked theorem under the already declared Lean foundation (`assumed.lean`); the kernel backend and proof encoding remain open. |
 
 ## Alternatives
 
@@ -213,6 +253,8 @@ The rules below go into [Propositions and proofs](../../spec/proofs.md).
 4. **A procedure uses only the facts it is given, and `_` tries three named things.** Proposed, and accepted with the rest.
 5. **A lemma takes its values as parameters, a quantified statement uses `forall` and `exists`, and `_` stands for a value that the checker can infer.** The owner asked of a lemma written with generic parameters: "can we use forall and exists in stdlib for writing this".
 6. **A branch's fact is named where the branch is written.** The spelling is the owner's: "Maybe we can use if h: x < 0: { here h refers to proof} or something like that."
+
+**Decided by the owner in I07a on 2026-11-26:** pure logical functions have extensional `===`, obtained by an explicit theorem application from pointwise `===`. RFC 0002 decision 127 records the authorization; this RFC records the `eq::funext` API and its boundary. The kernel realization is still work, not a claim that an implementation exists.
 
 **Still for the owner.** Each is written into the rules and examples as proposed:
 
