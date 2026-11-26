@@ -1,0 +1,186 @@
+[
+  {
+    "name": "vc01_prefix_arbitrary_element",
+    "expected": "unsat",
+    "actual": "unsat",
+    "interpretation": "Any final element value preserves initialized-prefix shape, for arbitrary capacity and length.",
+    "passed": true
+  },
+  {
+    "name": "vc02_capacity_preserved",
+    "expected": "unsat",
+    "actual": "unsat",
+    "interpretation": "Shape borrowing does not change capacity or length.",
+    "passed": true
+  },
+  {
+    "name": "vc03_frame_outside_element",
+    "expected": "unsat",
+    "actual": "unsat",
+    "interpretation": "Loan relation frames every different index.",
+    "passed": true
+  },
+  {
+    "name": "vc04_lending_optional_slot_is_too_strong",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "Giving out &mut Option<T> permits deinitialization.",
+    "passed": true,
+    "witness": {
+      "capacity": "1",
+      "length": "1",
+      "index": "0"
+    },
+    "model": "[index = 0,\n length = 1,\n entry_initialized = K(Int, True),\n capacity = 1]"
+  },
+  {
+    "name": "vc05_sorted_arbitrary_element",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "SortedVec cannot give out arbitrary &mut element with no pledge.",
+    "passed": true,
+    "witness": {
+      "entry_left": "0",
+      "entry_right": "0",
+      "final_left": "1"
+    },
+    "model": "[entry_left = 0, final_left = 1, entry_right = 0]"
+  },
+  {
+    "name": "vc06_sorted_with_constrained_final",
+    "expected": "unsat",
+    "actual": "unsat",
+    "interpretation": "Neighbor bounds on the final value preserve arbitrary-length sortedness; an unrestricted loan supplies no such bounds.",
+    "passed": true
+  },
+  {
+    "name": "vc07_no_circular_invariant_assumption",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "Entry proof alone cannot certify a clearing mutation.",
+    "passed": true,
+    "witness": {
+      "capacity": "7721",
+      "length": "7720",
+      "index": "7719"
+    },
+    "model": "[index = 7719,\n length = 7720,\n final_initialized = Store(Store(K(Int, True), 7720, False),\n                           7719,\n                           False),\n capacity = 7721,\n entry_initialized = Store(K(Int, True), 7720, False)]"
+  },
+  {
+    "name": "vc08_circular_premise_vacuously_hides_bug",
+    "expected": "unsat",
+    "actual": "unsat",
+    "interpretation": "Negative control: assuming the suspended invariant hides the error.",
+    "passed": true
+  },
+  {
+    "name": "vc09_normal_contract_does_not_prove_unwind_safety",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "Normal-return evidence supplies no fact on the unwind edge.",
+    "passed": true,
+    "witness": {
+      "normal_return": "False",
+      "capacity": "2",
+      "length": "1",
+      "index": "0",
+      "final_initialized[index]": "False"
+    },
+    "model": "[entry_initialized = Store(Store(K(Int, True), 39, False),\n                           1,\n                           False),\n final_initialized = Store(K(Int, False), 39, True),\n index = 0,\n length = 1,\n normal_return = False,\n capacity = 2,\n k!28 = [39 -> True, else -> False],\n k!29 = [39 -> False, 1 -> False, else -> True],\n Ext = [(as-array, as-array) -> 39, else -> 0]]"
+  },
+  {
+    "name": "vc10_initialized_does_not_imply_no_panic",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "An initialized input is compatible with a panicking callee.",
+    "passed": true,
+    "witness": {
+      "normal_return": "False",
+      "capacity": "1",
+      "length": "1",
+      "index": "0"
+    },
+    "model": "[index = 0,\n length = 1,\n capacity = 1,\n entry_initialized = K(Int, True),\n normal_return = False]"
+  },
+  {
+    "name": "vc11_enclosing_invariant",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "Preserving the child positivity invariant can break its parent bound.",
+    "passed": true,
+    "witness": {
+      "entry_left": "0",
+      "entry_right": "0",
+      "final_left": "11"
+    },
+    "model": "[entry_right = 0, final_left = 11, entry_left = 0]"
+  },
+  {
+    "name": "vc12_two_loans_joint_obligation",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "Two separately valid entry-based checks do not imply joint restoration.",
+    "passed": true,
+    "witness": {
+      "final_left": "10",
+      "final_right": "1"
+    },
+    "model": "[final_left = 10,\n final_right = 1,\n entry_left = 0,\n entry_right = 0]"
+  },
+  {
+    "name": "vc13_distinct_reborrow_final_values",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "The two loan IDs cannot share one final-value symbol.",
+    "passed": true,
+    "witness": {
+      "inner_end": "1",
+      "outer_end": "2"
+    },
+    "model": "[outer_end = 2, inner_end = 1]"
+  },
+  {
+    "name": "vc14_current_element_is_not_final_element",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "An acquisition-return snapshot cannot replace the returned reference final term.",
+    "passed": true,
+    "witness": {
+      "slot_at_acquisition_return": "4",
+      "arbitrary_final_element": "5"
+    },
+    "model": "[arbitrary_final_element = 5,\n index = 0,\n length = 1,\n slot_at_acquisition_return = 4,\n capacity = 1,\n entry_initialized = K(Int, True),\n entry_contents = K(Int, 0),\n final_contents = Store(K(Int, 0), 0, 5),\n final_initialized = K(Int, True)]"
+  },
+  {
+    "name": "vc15_future_data_liar",
+    "expected": "unsat",
+    "actual": "unsat",
+    "interpretation": "Negative control: allowing future-dependent writes admits an impossible fixed point.",
+    "passed": true
+  },
+  {
+    "name": "vc16_cache_needs_actual_loan_end_update",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "Native in-place shape preservation does not update a separate wrapper cache.",
+    "passed": true,
+    "witness": {
+      "cached_element": "1",
+      "memory_at_loan_end": "0"
+    },
+    "model": "[slot_at_acquisition_return = 1,\n arbitrary_final_element = 0,\n cached_element = 1,\n memory_at_loan_end = 0]"
+  },
+  {
+    "name": "vc17_other_proof_dependencies_must_stay_fixed",
+    "expected": "sat",
+    "actual": "sat",
+    "interpretation": "Freezing proof reads does not alone freeze other dependencies such as length.",
+    "passed": true,
+    "witness": {
+      "capacity": "2",
+      "length": "1",
+      "changed_sibling_length": "2"
+    },
+    "model": "[index = 0,\n length = 1,\n changed_sibling_length = 2,\n final_initialized = Store(Store(K(Int, True), 1, False),\n                           0,\n                           True),\n capacity = 2,\n entry_initialized = Store(K(Int, True), 1, False),\n entry_contents = K(Int, 0),\n arbitrary_final_element = 0,\n final_contents = K(Int, 0)]"
+  }
+]

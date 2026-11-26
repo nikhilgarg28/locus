@@ -1,0 +1,6 @@
+CAUGHT_NAMED_ARGUMENT
+
+thread 'main' (23294) panicked at rust/probes.rs:315:25:
+named argument evaluation
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+OWNER_DROP_VALID=true

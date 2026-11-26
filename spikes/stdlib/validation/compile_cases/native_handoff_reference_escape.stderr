@@ -1,0 +1,15 @@
+error: lifetime may not live long enough
+ --> /workspace/locus-loans-pr/spikes/stdlib/validation/compile_cases/native_handoff_reference_escape.rs:1:113
+  |
+1 | use locus_stdlib_spike::wrappers::WVec; fn main(){let mut w=WVec::from_std(vec![1_u32]);let r=w.with_native(|v| &mut v[0]);*r=2;}
+  |                                                                                                              -- ^^^^^^^^^ returning this value requires that `'1` must outlive `'2`
+  |                                                                                                              ||
+  |                                                                                                              |return type of closure is &'2 mut u32
+  |                                                                                                              has type `&'1 mut Vec<u32>`
+  |
+help: dereference the return value
+  |
+1 | use locus_stdlib_spike::wrappers::WVec; fn main(){let mut w=WVec::from_std(vec![1_u32]);let r=w.with_native(|v| *&mut v[0]);*r=2;}
+  |                                                                                                                 +
+
+error: aborting due to 1 previous error

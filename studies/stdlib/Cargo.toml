@@ -1,0 +1,18 @@
+[package]
+name = "locus-stdlib-study"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+path = "src/lib.lc"
+
+[[bin]]
+name = "interop"
+path = "src/bin/interop.lc"
+
+[package.metadata.locus-study]
+status = "unverified-workload"
+requires = ["Locus compiler and prelude", "memory-core specification", "OPEN library proofs"]

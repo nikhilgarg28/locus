@@ -1,0 +1,7 @@
+
+thread 'main' (23297) panicked at rust/permission_kernel.rs:67:9:
+assertion `left == right` failed: initialization permission mismatch
+  left: false
+ right: true
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ABORT_ACQUISITION

@@ -1,0 +1,96 @@
+use crate::seq::Maybe;
+use crate::map::Map;
+use crate::std_api::{StdOrdBridge,StdHashBridge};
+use locus::Opaque;
+
+pub struct BTreeMap<K:StdOrdBridge,V>{raw:Opaque<std::collections::BTreeMap<K,V>>,model:Map<K::Key,Snap<V>>}
+impl<K:StdOrdBridge,V:Snapshot> BTreeMap<K,V>{
+    pub logic fn contents(s:Snap<Self>)->Map<K::Key,Snap<V>>{s.model}
+    #[verified]
+    pub fn empty()->(m:Self,@(m.model.len()==0)){
+        (BTreeMap{raw:Opaque::new(std::collections::BTreeMap::new()),model:Map::empty()},_)
+    }
+    #[verified]
+    pub fn insert_checked(&mut self,key:K,value:V)->(old:Option<V>,
+        @(final!(self).model.equivalent(self.model.insert(K::key(snap(key)),snap(value)))
+            && (match old{None=>self.model.get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>self.model.get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let before=logic!{self.model};let k=logic!{K::key(snap(key))};let v=logic!{snap(value)};
+        let old=self.raw.get_mut().insert(key,value);
+        let previous=unsafe assume!(match old{None=>before.get(k)===Maybe::None,Some(x)=>before.get(k)===Maybe::Some(snap(x))});
+        self.model=logic!{before.insert(k,v)};
+        (old,_) // TRUST STD-BTREE + exact Ord bridge to K::key.
+    }
+    #[verified]
+    pub fn get_checked(&self,key:&K)->(out:Option<&V>,@(match out{
+        None=>self.model.get(K::key(snap(key)))===Maybe::None,
+        Some(v)=>self.model.get(K::key(snap(key)))===Maybe::Some(snap(v)),
+    })){
+        let out=self.raw.get_ref().get(key);
+        (out,unsafe assume!(_)) // TRUST STD-BTREE; concrete proposition is result's.
+    }
+    #[verified]
+    pub fn remove_checked(&mut self,key:&K)->(old:Option<V>,
+        @(final!(self).model.equivalent(self.model.remove(K::key(snap(key))))
+            && (match old{None=>self.model.get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>self.model.get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let before=logic!{self.model};let k=logic!{K::key(snap(key))};
+        let old=self.raw.get_mut().remove(key);
+        let previous=unsafe assume!(match old{None=>before.get(k)===Maybe::None,Some(x)=>before.get(k)===Maybe::Some(snap(x))});
+        self.model=logic!{before.remove(k)};(old,_)
+        // The model change is proved; raw/model correspondence is still trusted.
+    }
+    #[verified]
+    pub fn insert(&mut self,key:K,value:V)->Option<V>{self.insert_checked(key,value).0}
+    #[verified]
+    pub fn get(&self,key:&K)->Option<&V>{self.get_checked(key).0}
+}
+
+pub struct HashMap<K:StdHashBridge,V>{raw:Opaque<std::collections::HashMap<K,V>>,model:Map<K::Key,Snap<V>>}
+impl<K:StdHashBridge,V:Snapshot> HashMap<K,V>{
+    pub logic fn contents(s:Snap<Self>)->Map<K::Key,Snap<V>>{s.model}
+    #[verified]
+    pub fn empty()->(m:Self,@(m.model.len()==0)){
+        (HashMap{raw:Opaque::new(std::collections::HashMap::new()),model:Map::empty()},_)
+    }
+    #[verified]
+    pub fn insert_checked(&mut self,key:K,value:V)->(old:Option<V>,
+        @(final!(self).model.equivalent(self.model.insert(K::key(snap(key)),snap(value)))
+            && (match old{None=>self.model.get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>self.model.get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let before=logic!{self.model};let k=logic!{K::key(snap(key))};let v=logic!{snap(value)};
+        let old=self.raw.get_mut().insert(key,value);
+        let previous=unsafe assume!(match old{None=>before.get(k)===Maybe::None,Some(x)=>before.get(k)===Maybe::Some(snap(x))});
+        self.model=logic!{before.insert(k,v)};(old,_)
+        // TRUST STD-HASH: Eq bridge and hash-input/state law, not just an Ord law.
+    }
+    #[verified]
+    pub fn get_checked(&self,key:&K)->(out:Option<&V>,@(match out{
+        None=>self.model.get(K::key(snap(key)))===Maybe::None,
+        Some(v)=>self.model.get(K::key(snap(key)))===Maybe::Some(snap(v)),
+    })){
+        let out=self.raw.get_ref().get(key);(out,unsafe assume!(_))
+    }
+    #[verified]
+    pub fn remove_checked(&mut self,key:&K)->(old:Option<V>,
+        @(final!(self).model.equivalent(self.model.remove(K::key(snap(key))))
+            && (match old{None=>self.model.get(K::key(snap(key)))===Maybe::None,
+                Some(v)=>self.model.get(K::key(snap(key)))===Maybe::Some(snap(v))})))
+    {
+        let before=logic!{self.model};let k=logic!{K::key(snap(key))};
+        let old=self.raw.get_mut().remove(key);
+        let previous=unsafe assume!(match old{None=>before.get(k)===Maybe::None,Some(x)=>before.get(k)===Maybe::Some(snap(x))});
+        self.model=logic!{before.remove(k)};(old,_)
+    }
+    #[verified]
+    pub fn insert(&mut self,key:K,value:V)->Option<V>{self.insert_checked(key,value).0}
+    #[verified]
+    pub fn get(&self,key:&K)->Option<&V>{self.get_checked(key).0}
+}
+// These models specify value lookup, not which equivalent key representative is
+// retained. Rust's insertion preserves the earlier stored key. An entries/keys
+// iterator or get_key_value contract needs an additional representative relation.
+// Borrow<Q> also needs a law tying the borrowed query's equality/order/hash to K.

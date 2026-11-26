@@ -1,0 +1,33 @@
+//~ question: Can the inner contract discharge a separate enclosing invariant at acquisition return?
+//~ spec: contracts.invariants.acquisition, contracts.invariants.observed
+//~ rfc: 0002
+
+fn first_mut(pair: &mut (u32, u32))
+    -> (x: &mut u32, @(final!(pair) === (final!(x), pair.1)))
+{
+    (&mut pair.0, _)
+}
+
+struct Tagged {
+    data: (u32, u32),
+    valid: @(data.1 == 7),
+}
+
+impl Tagged {
+    fn first(&mut self) -> (x: &mut u32, @(final!(self).data.1 == 7)) {
+        let before = logic! { snap(self.data) };
+        let old = self.valid;
+        let r = &mut self.data;
+        let (x, relation) = first_mut(r);
+        let kept: @(final!(r).1 == 7) = _;
+        (x, _)
+    }
+}
+struct Outer { inner: Tagged, same_tag: @(inner.data.1 == 7) }
+fn first(outer: &mut Outer) -> &mut u32 {
+    let old = outer.same_tag;
+    let r = &mut outer.inner;
+    let (x, relation) = r.first();
+    let kept: @(final!(r).data.1 == 7) = _;
+    x
+}

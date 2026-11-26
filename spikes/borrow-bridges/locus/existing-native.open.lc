@@ -1,0 +1,16 @@
+// Exploratory adapter obligations, not executable declarations of new trust.
+
+fn string_borrow<'a>(s: &'a String)
+    -> (q: &'a str, @(snap(*q) === std_text::bytes(snap(*s)))) {
+    std_text::borrow_verified(s)
+}
+
+fn identity_borrow<'a, T: Snapshot + ?Sized>(x: &'a T)
+    -> (q: &'a T, @(snap(*q) === snap(*x))) {
+    std_identity::borrow_verified(x)
+}
+
+// Neither adapter may generate a new Borrow implementation: both already exist.
+// Their evidence must attach to <String as Borrow<str>>::borrow and the actual
+// core blanket <T as Borrow<T>>::borrow, not merely the wrappers above.
+// `str`/slice reference and snapshot marker lowering still needs Locus tests.

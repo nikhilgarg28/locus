@@ -1,0 +1,25 @@
+; benchmark generated from python API
+(set-info :status unknown)
+(declare-sort Trace 0)
+(declare-sort Q 0)
+(declare-sort K 0)
+(declare-fun query_trace (Q) Trace)
+(declare-fun q () Q)
+(declare-fun key_trace (K) Trace)
+(declare-fun k () K)
+(declare-fun state2 () Int)
+(declare-fun state1 () Int)
+(declare-fun digest (Int Trace) Int)
+(assert
+ (let ((?x13 (query_trace q)))
+ (let ((?x10 (key_trace k)))
+ (= ?x10 ?x13))))
+(assert
+ (= state1 state2))
+(assert
+ (let ((?x13 (query_trace q)))
+(let ((?x72 (digest state2 ?x13)))
+(let ((?x10 (key_trace k)))
+(let ((?x20 (digest state1 ?x10)))
+(and (distinct ?x20 ?x72) true))))))
+(check-sat)

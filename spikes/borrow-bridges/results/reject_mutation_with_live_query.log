@@ -1,0 +1,13 @@
+error[E0502]: cannot borrow `owner` as mutable because it is also borrowed as immutable
+ --> /workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_mutation_with_live_query.rs:5:5
+  |
+4 |     let query = native_borrow::<String, str, StdText>(&owner);
+  |                                                       ------ immutable borrow occurs here
+5 |     owner.clear();
+  |     ^^^^^^^^^^^^^ mutable borrow occurs here
+6 |     println!("{query}");
+  |                ----- immutable borrow later used here
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0502`.

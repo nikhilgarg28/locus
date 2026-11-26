@@ -1,0 +1,120 @@
+// A finite mathematical map, independent of B-trees, hashes, and insertion order.
+use crate::seq::{Seq, Maybe};
+
+// Exact prop constructor spelling follows the existing `Arm(args) @ proof` form.
+prop Finite<K: Logical, V: Logical>(f: logic fn(K) -> Maybe<V>, size: Nat) {
+    Witness(keys: Seq<K>) => { keys.unique() && keys.len() == size
+        && (forall |k: K| iff(keys.contains(k), f(k) !== Maybe::None)) }
+}
+
+#[derive(Logical)]
+pub struct Map<K: Logical, V: Logical> {
+    lookup: logic fn(K) -> Maybe<V>,
+    size: Nat,
+    finite: @Finite(lookup, size),
+}
+impl<K: Logical, V: Logical> Map<K, V> {
+    pub logic fn empty() -> Self {
+        let lookup = |k: K| Maybe::None;
+        let domain: @(forall |k: K| iff(Seq::<K>::Nil.contains(k), lookup(k) !== Maybe::None)) =
+            |k: K| _;
+        Map { lookup, size: 0, finite: Finite::Witness(Seq::Nil) @ _ }
+    }
+    pub logic fn get(self, k: K) -> Maybe<V> { (self.lookup)(k) }
+    pub logic fn len(self) -> Nat { self.size }
+    pub logic fn insert(self, k: K, v: V) -> Self {
+        let next = |q: K| if q === k { Maybe::Some(v) } else { self.get(q) };
+        let size = if self.get(k) === Maybe::None { self.size + 1 } else { self.size };
+        let finite = finite_insert(self.lookup, self.size, self.finite, k, v);
+        Map { lookup: next, size, finite }
+    }
+    pub logic fn remove(self, k: K) -> Self {
+        let next = |q: K| if q === k { Maybe::None } else { self.get(q) };
+        let size = if self.get(k) === Maybe::None { self.size }
+            else { (self.size - 1).as_nat(nonempty_size(self, k, _)) };
+        let finite = finite_remove(self.lookup, self.size, self.finite, k);
+        Map { lookup: next, size, finite }
+    }
+    pub logic fn equivalent(self, other: Self) -> Prop {
+        self.size === other.size && (forall |k: K| self.get(k) === other.get(k))
+    }
+}
+
+logic fn without<K: Logical>(s: Seq<K>, k: K) -> Seq<K> {
+    match s {
+        Seq::Nil => Seq::Nil,
+        Seq::Cons(head, tail) => if head === k { without(tail, k) }
+            else { Seq::Cons(head, without(tail, k)) },
+    }
+}
+logic fn nonempty_size<K: Logical,V: Logical>(m: Map<K,V>, k: K,
+    present: @(m.get(k) !== Maybe::None)) -> @(m.size as Int - 1 >= 0)
+{
+    nonempty_fn_size(m.lookup,m.size,m.finite,k,present)
+}
+logic fn nonempty_fn_size<K:Logical,V:Logical>(f:logic fn(K)->Maybe<V>,n:Nat,
+    finite:@Finite(f,n),k:K,present:@(f(k)!==Maybe::None))->@(n as Int - 1 >= 0)
+{
+    match finite {
+        Finite::Witness(keys) @ facts => {
+            let support: @(forall |q: K| iff(keys.contains(q), f(q) !== Maybe::None)) = _;
+            let at_key = support(k);
+            let positive=crate::seq::contains_positive(keys,k,_);
+            _
+        }
+    }
+}
+logic fn finite_insert<K: Logical,V: Logical>(f: logic fn(K)->Maybe<V>, n: Nat,
+    finite: @Finite(f,n), k: K, v: V)
+    -> @Finite(|q: K| if q === k { Maybe::Some(v) } else { f(q) },
+        if f(k) === Maybe::None { n + 1 } else { n })
+{
+    match finite {
+        Finite::Witness(keys) @ facts => {
+            if f(k) === Maybe::None {
+                let support: @(forall |q: K| iff(keys.contains(q), f(q) !== Maybe::None)) = _;
+                let absent = support(k);
+                let next_keys = Seq::Cons(k, keys);
+                let next_support: @(forall |q: K| iff(next_keys.contains(q),
+                    (if q === k {Maybe::Some(v)} else {f(q)}) !== Maybe::None)) =
+                    |q: K| { let old = support(q); _ };
+                Finite::Witness(next_keys) @ _ // OPEN: assemble support and uniqueness.
+            } else { Finite::Witness(keys) @ _ }
+        }
+    }
+}
+logic fn finite_remove<K: Logical,V: Logical>(f: logic fn(K)->Maybe<V>, n: Nat,
+    finite: @Finite(f,n), k: K)
+    -> @Finite(|q: K| if q === k { Maybe::None } else { f(q) },
+        if f(k) === Maybe::None { n }
+            else { (n - 1).as_nat(nonempty_fn_size(f,n,finite,k,_)) })
+{
+    match finite {
+        Finite::Witness(keys) @ facts => {
+            let rest = without(keys,k);
+            // OPEN: without preserves uniqueness, support, and removes exactly
+            // one key when present. The witness remains entirely inside a proof.
+            Finite::Witness(rest) @ _
+        }
+    }
+}
+pub logic fn get_insert<K: Logical,V: Logical>(m: Map<K,V>, k: K, v: V, q: K)
+    -> @(m.insert(k,v).get(q) === if q === k {Maybe::Some(v)} else {m.get(q)})
+{ _ }
+pub logic fn insert_overwrite<K: Logical,V: Logical>(m: Map<K,V>, k: K, a: V, b: V)
+    -> @(m.insert(k,a).insert(k,b).equivalent(m.insert(k,b)))
+{
+    let pointwise: @(forall |q: K|
+        m.insert(k,a).insert(k,b).get(q) === m.insert(k,b).get(q)) = |q: K| {
+        let first = get_insert(m,k,a,q);
+        let second = get_insert(m.insert(k,a),k,b,q);
+        let direct = get_insert(m,k,b,q);
+        _
+    };
+    _
+}
+// DESIGN GATE: Map's === should be extensional. The lookup-function + finite
+// certificate representation avoids exposing insertion order, but upgrading
+// equivalent to === needs a checked function-extensionality/cardinality lemma.
+// Lean can supply the mathematical theorem; current Locus has no public funext
+// API. No new trusted map axioms are assumed. Contracts use equivalent meanwhile.

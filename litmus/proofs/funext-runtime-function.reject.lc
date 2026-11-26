@@ -1,0 +1,13 @@
+//~ question: Does funext certify equality of ordinary executable functions with the same apparent body?
+//~ spec: proofs.equality.funext
+//~ rfc: 0003
+
+// These are ordinary verified runtime functions, even though their data is ghost.
+fn native_left(x: Nat) -> Nat { x }
+fn native_right(x: Nat) -> Nat { x }
+
+fn cannot_identify_runtime_functions() {
+    let same = logic! {
+        eq::funext(native_left, native_right, |x: Nat| eq::refl(x)) //~ error: funext takes pure logical functions, not executable function items
+    };
+}

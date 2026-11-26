@@ -1,0 +1,11 @@
+//~ question: Can the logical unreachable function coexist with Rust's panicking macro?
+//~ spec: logic.types.never, logic.ghost.erased, proofs.elimination
+//~ rfc: 0002
+
+pub logic fn unreachable(p: @False) -> ! { match p {} }
+
+fn stop() -> ! {
+    unreachable!()
+}
+
+//~ run: stop() => panic

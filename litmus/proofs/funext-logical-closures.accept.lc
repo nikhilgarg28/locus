@@ -1,0 +1,16 @@
+//~ question: Does function extensionality apply to logical closures with captured logical values?
+//~ spec: proofs.equality.funext, proofs.forall, proofs.procedures.linear
+//~ rfc: 0003
+
+logic fn same_offsets(a: Nat, b: Nat, same: @(a === b))
+    -> @(forall |x: Nat| a + x === b + x) {
+    |x: Nat| linear((same,))
+}
+
+logic fn compare_offsets(a: Nat, b: Nat, same: @(a === b)) -> @True {
+    let f = |x: Nat| a + x;
+    let g = |x: Nat| b + x;
+    let pointwise: @(forall |x: Nat| f(x) === g(x)) = same_offsets(a, b, same);
+    let functions_equal: @(f === g) = eq::funext(f, g, pointwise);
+    True::Intro
+}

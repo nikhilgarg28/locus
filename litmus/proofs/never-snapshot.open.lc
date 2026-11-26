@@ -1,0 +1,8 @@
+//~ question: Is a snapshot of runtime never available and how does it relate to logical never?
+//~ issue: logical-never-lowering
+//~ spec: logic.types.never
+//~ rfc: 0002
+
+logic fn eliminate_snapshot(value: Snap<!>) -> Nat {
+    match value {}
+}

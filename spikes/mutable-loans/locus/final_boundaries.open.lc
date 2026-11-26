@@ -1,0 +1,33 @@
+// M16-M20. Keep the core-term pending-final restriction even after adding syntax.
+
+// M16 EXPECT REJECTION: pending final value becomes independently stored data.
+let r = &mut value;
+let tomorrow: Nat = final!(r);
+*r = if tomorrow == 0 { 1 } else { 0 };
+// vc15 illustrates why future-dependent writes cannot be admitted.
+
+// M17 EXPECT REJECTION: logical Prop values are data too.
+let r = &mut value;
+let future_prop: Prop = final!(r) === 0;
+// A core-term check must also catch hidden occurrences through inferred holes,
+// function results, closures and projections, not merely textual final!.
+
+// M18 EXPECT ACCEPTANCE: pending terms only in proofs and proof propositions.
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(i,_);
+let kept: @prefix(Region::cells(final!(r)),n) =
+    prefix_after_loan(before,Region::cells(final!(r)),n,i,final!(x),shape,inside,loan);
+
+// M19 EXPECT REJECTION: existing after-loan example keeps its outcome.
+let mut n = 0;
+let r = &mut n;
+*r = 5;
+n += 1; // previous loan has ended
+let p: @(final!(r) === 5) = _; // stale source reference; diagnostic must change.
+
+// M20 EXPECT REJECTION for the native-only rule: wrapped ghost state still needs
+// an actual loan-end protocol (I03). A proof-only final term is not an assignable
+// sequence value while pending, even if assigning it would be convenient.
+let r = &mut self.raw;
+let (x,loan) = r.get_mut_checked(i,_);
+self.contents = self.contents.update(i,final!(x));

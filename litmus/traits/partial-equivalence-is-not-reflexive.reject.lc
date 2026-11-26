@@ -1,0 +1,9 @@
+//~ question: Do symmetry and transitivity alone prove every logical value equivalent to itself?
+//~ spec: traits.equivalence
+//~ rfc: 0006
+
+use locus::logic::PartialEquiv;
+
+logic fn missing_reflexivity<K: PartialEquiv>(a: K) -> @(a == a) {
+    _ //~ error: PartialEquiv does not promise reflexivity; this proof requires Equiv or separate evidence
+}

@@ -1,0 +1,7 @@
+{
+  "tests": 15,
+  "failed": 0,
+  "settings": "default",
+  "scope": "unit tests only; includes raw permission kernel",
+  "rustc": "1.102.0-nightly (739adecd4 2026-11-24)"
+}

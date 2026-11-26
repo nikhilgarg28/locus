@@ -1,0 +1,9 @@
+//~ question: Does an available equivalence policy implicitly give its domain logical ==?
+//~ spec: traits.equivalence, traits.equivalence.same, traits.operators
+//~ rfc: 0006
+
+use locus::logic::Equiv;
+
+logic fn no_ambient_operator<K: Logical, E: Equiv<K>>(a: K, b: K) -> Prop {
+    a == b //~ error: logical == requires K: PartialEquiv<K>; E: Equiv<K> supplies no such implementation
+}

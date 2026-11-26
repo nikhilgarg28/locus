@@ -1,0 +1,6 @@
+CAUGHT_NATIVE_AFTER_RETURN
+
+thread 'main' (23298) panicked at rust/probes.rs:342:21:
+client panic with native element loan
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+NATIVE_OWNER_DROP_VALID=true

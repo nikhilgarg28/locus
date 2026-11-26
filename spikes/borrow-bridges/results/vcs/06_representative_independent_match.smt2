@@ -1,0 +1,40 @@
+; benchmark generated from python API
+(set-info :status unknown)
+(declare-sort K 0)
+(declare-sort Q 0)
+(declare-fun key_equiv (K K) Bool)
+(declare-fun l () K)
+(declare-fun k () K)
+(declare-fun query_equiv (Q Q) Bool)
+(declare-fun q () Q)
+(declare-fun projection (K) Q)
+(assert
+ (key_equiv k l))
+(assert
+ (let ((?x8 (projection k)))
+ (query_equiv ?x8 q)))
+(assert
+ (let ((?x16 (projection l)))
+ (let ((?x8 (projection k)))
+ (let (($x36 (query_equiv ?x8 ?x16)))
+ (let (($x41 (key_equiv k l)))
+ (=> $x41 $x36))))))
+(assert
+ (let ((?x8 (projection k)))
+ (let ((?x16 (projection l)))
+ (let (($x18 (query_equiv ?x16 ?x8)))
+ (let (($x36 (query_equiv ?x8 ?x16)))
+ (=> $x36 $x18))))))
+(assert
+ (let ((?x16 (projection l)))
+ (let (($x29 (query_equiv ?x16 q)))
+ (let ((?x8 (projection k)))
+ (let (($x9 (query_equiv ?x8 q)))
+ (let (($x18 (query_equiv ?x16 ?x8)))
+ (let (($x31 (and $x18 $x9)))
+ (=> $x31 $x29))))))))
+(assert
+ (let ((?x16 (projection l)))
+(let (($x29 (query_equiv ?x16 q)))
+(not $x29))))
+(check-sat)

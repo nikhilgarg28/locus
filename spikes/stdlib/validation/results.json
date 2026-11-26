@@ -1,0 +1,63 @@
+{
+  "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)",
+  "runs": [
+    {
+      "name": "format",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 0.089,
+      "tests_passed": 0
+    },
+    {
+      "name": "debug_audit",
+      "command": [
+        "cargo",
+        "test",
+        "--offline"
+      ],
+      "exit_code": 0,
+      "seconds": 3.237,
+      "tests_passed": 32
+    },
+    {
+      "name": "debug_erased_shadows",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--no-default-features"
+      ],
+      "exit_code": 0,
+      "seconds": 1.853,
+      "tests_passed": 32
+    },
+    {
+      "name": "release_audit",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--release"
+      ],
+      "exit_code": 0,
+      "seconds": 2.427,
+      "tests_passed": 32
+    },
+    {
+      "name": "compile_rejections",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "validation/compile_cases.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.227,
+      "tests_passed": 0
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+// Actual Locus algorithm on permissioned storage. No std::Vec in this module.
+use crate::seq::{Seq,Maybe};
+use crate::permissions::Region;
+use locus::std::mem;
+
+logic fn prefix<A:Logical>(cells:Seq<Maybe<A>>, n:Nat)->Prop {
+    n<=cells.len()
+    && (forall |i:Nat| i<n ==> cells.get(i)!==Maybe::Some(Maybe::None))
+    && (forall |i:Nat| n<=i && i<cells.len() ==> cells.get(i)===Maybe::Some(Maybe::None))
+}
+logic fn values<A:Logical>(cells:Seq<Maybe<A>>, n:Nat)->Seq<A> {
+    match cells {
+        Seq::Nil=>Seq::Nil,
+        Seq::Cons(head,tail)=>if n==0 {Seq::Nil} else {
+            let rest=values(tail,(n-1).as_nat(_));
+            match head {Maybe::None=>rest,Maybe::Some(x)=>Seq::Cons(x,rest)}
+        },
+    }
+}
+pub struct Vec<T:Snapshot> {
+    data:Region<T>, len:usize,
+    shape:@prefix(Region::cells(snap(data)),len),
+}
+impl<T:Snapshot> Vec<T> {
+    pub logic fn elements(s:Snap<Self>)->Seq<Snap<T>> {
+        values(Region::cells(s.data),s.len)
+    }
+    #[verified]
+    pub fn empty()->(v:Self,@(Self::elements(snap(v))===Seq::Nil)) {
+        let (data,empty)=Region::allocate(0);
+        (Vec{data,len:0,shape:_},_)
+    }
+    #[verified]
+    pub fn len_checked(&self)->(n:usize,@(n===Self::elements(snap(self)).len())) {
+        // OPEN lemma: prefix(cells,n) implies values(cells,n).len()==n.
+        (self.len,_)
+    }
+    #[verified]
+    pub fn len(&self)->usize {self.len}
+    #[verified]
+    pub fn get_checked(&self,i:usize,p:@(i<Self::elements(snap(self)).len()))
+        ->(x:&T,@(Self::elements(snap(self)).get(i)===Maybe::Some(snap(x))))
+    {
+        let (x,read)=self.data.read_checked(i,_);
+        // OPEN lemma: get of values at an initialized prefix position.
+        (x,_)
+    }
+    #[verified]
+    pub fn reserve_checked(&mut self,want:usize)
+        ->@(Self::elements(snap(final!(self)))===Self::elements(snap(self))
+            && Region::capacity(snap(final!(self).data))>=want)
+    {
+        let (cap,capacity)=self.data.capacity_checked();
+        if want<=cap {return _;}
+        let before=logic!{Self::elements(snap(self))};
+        let (slot,old,was)=mem::take_out(self);
+        let Vec{mut data,len,shape}=old;
+        let (mut next,vacant)=Region::allocate(want);
+        let mut i:usize=0;
+        let mut moving:@(i<=len
+            && values(Region::cells(snap(next)),i)===before.take(i)
+            && values(Region::cells(snap(data)).skip(i),(len as Int-i as Int).as_nat(_))===before.skip(i))=_;
+        while i<len {
+            let (x,taken)=data.take_checked(i,_);
+            let written=next.write_checked(i,x,_);
+            i+=1;
+            moving=_; // OPEN: explicit prefix/suffix lemmas and equality transport.
+        }
+        data.free(_);
+        slot.put(Vec{data:next,len,shape:_});
+        _
+    }
+    #[verified]
+    pub fn push_checked(&mut self,x:T)
+        ->@(Self::elements(snap(final!(self)))===Self::elements(snap(self)).push(snap(x))
+            && final!(self).len==self.len+1)
+    {
+        let next=match self.len.checked_add(1) {Some(n)=>n,None=>panic!("length overflow")};
+        let grown=self.reserve_checked(next);
+        let (slot,old,was)=mem::take_out(self);
+        let Vec{mut data,len,shape}=old;
+        let written=data.write_checked(len,x,_);
+        slot.put(Vec{data,len:next,shape:_});
+        _ // OPEN: values of prefix extended by one initialized cell.
+    }
+    #[verified]
+    pub fn push(&mut self,x:T) {let proof=self.push_checked(x);}
+    #[verified]
+    pub fn pop_checked(&mut self)->(out:Option<T>,@(match out {
+        None=>self.len==0 && Self::elements(snap(final!(self)))===Self::elements(snap(self)),
+        Some(x)=>self.len>0 && Self::elements(snap(self)).get((self.len-1).as_nat(_))===Maybe::Some(snap(x))
+            && Self::elements(snap(final!(self)))===Self::elements(snap(self)).take((self.len-1).as_nat(_)),
+    }))
+    {
+        if self.len==0 {return (None,_);}
+        let (slot,old,was)=mem::take_out(self);
+        let Vec{mut data,len,shape}=old;
+        let next=len-1;
+        let (x,taken)=data.take_checked(next,_);
+        slot.put(Vec{data,len:next,shape:_});
+        (Some(x),_)
+    }
+    #[verified]
+    pub fn set_checked(&mut self,i:usize,x:T,p:@(i<self.len))
+        ->(old:T,@(Self::elements(snap(self)).get(i)===Maybe::Some(snap(old))
+            && Self::elements(snap(final!(self)))===Self::elements(snap(self)).update(i,snap(x))))
+    {
+        let (slot,previous,was)=mem::take_out(self);
+        let Vec{mut data,len,shape}=previous;
+        let (old,taken)=data.take_checked(i,_);
+        let written=data.write_checked(i,x,_);
+        slot.put(Vec{data,len,shape:_});
+        (old,_)
+    }
+    #[verified]
+    pub fn insert_checked(&mut self,i:usize,x:T,inside:@(i<=self.len))
+        ->@(Self::elements(snap(final!(self)))===Self::elements(snap(self)).insert(i,snap(x)))
+    {
+        let needed=match self.len.checked_add(1){Some(n)=>n,None=>panic!("length overflow")};
+        let space=self.reserve_checked(needed);
+        let before=logic!{Self::elements(snap(self))};
+        let (slot,old,was)=mem::take_out(self);
+        let Vec{mut data,len,shape}=old;
+        let mut j=len;
+        // OPEN moving-hole invariant: slot j is vacant; [i,j) is original and
+        // (j,len] is the original suffix shifted one right. Other slots unchanged.
+        while j>i{
+            let previous=j-1;
+            let (item,taken)=data.take_checked(previous,_);
+            let written=data.write_checked(j,item,_);
+            j=previous;
+        }
+        let written=data.write_checked(i,x,_);
+        slot.put(Vec{data,len:needed,shape:_});
+        _
+    }
+    #[verified]
+    pub fn remove_checked(&mut self,i:usize,inside:@(i<self.len))
+        ->(x:T,@(Self::elements(snap(self)).get(i)===Maybe::Some(snap(x))
+            && Self::elements(snap(final!(self)))===Self::elements(snap(self)).remove(i)))
+    {
+        let (slot,old,was)=mem::take_out(self);
+        let Vec{mut data,len,shape}=old;
+        let (x,taken)=data.take_checked(i,_);
+        let mut j=i;
+        // OPEN moving-hole invariant, dual of insert_checked.
+        while j<len-1{
+            let next=j+1;
+            let (item,taken)=data.take_checked(next,_);
+            let written=data.write_checked(j,item,_);
+            j=next;
+        }
+        slot.put(Vec{data,len:len-1,shape:_});
+        (x,_)
+    }
+}
+// get_mut_checked is deliberately NOT given a fake body. `shape` reads `data`,
+// so a mutable borrow of self.data is rejected by current invariant rules.
+// Taking self out does not help: the slot cannot escape with the returned loan.
+// An approved loan/open-invariant protocol or a different representation is
+// necessary. Permissioned snapshots alone do not close this gap.
+// General Drop and consuming conversion also need an invariant-safe dismantling
+// rule; the executable Region kernel handles cleanup, not a fabricated Locus proof.

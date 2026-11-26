@@ -1,0 +1,27 @@
+//~ question: Does the initial rule reject two simultaneous acquisitions covered by one proof field?
+//~ spec: contracts.invariants.acquisition
+//~ rfc: 0002
+
+fn first_mut(pair: &mut (u32, u32))
+    -> (x: &mut u32, @(final!(pair) === (final!(x), pair.1)))
+{
+    (&mut pair.0, _)
+}
+
+struct Tagged {
+    left: (u32,u32), right: (u32,u32),
+    valid: @(left.1 == right.1),
+}
+
+fn bad(owner: &mut Tagged) {
+    let before_left = logic! { snap(owner.left) };
+    let before_right = logic! { snap(owner.right) };
+    let old = owner.valid;
+    let r = &mut owner.left;
+    let (x, loan) = first_mut(r);
+    let kept: @(final!(r).1 == before_right.1) = _;
+    let s = &mut owner.right; //~ error: another acquisition covered by proof field `valid` is still live
+    let (y, second) = first_mut(s);
+    *x = 1;
+    *y = 2;
+}

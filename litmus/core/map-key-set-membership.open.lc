@@ -1,0 +1,16 @@
+//~ question: Which checked library interface establishes membership of a finite map's logical key set?
+//~ issue: finite-map-set-representation
+//~ rfc: 0005
+
+// The Set result and membership condition are adopted. These paths and
+// theorem spelling are provisional until the representation/API is specified.
+use locus::logic::{map, Map, Set, Maybe, Equiv};
+
+logic fn key_set<K: Logical, V: Logical, E: Equiv<K>>(m: Map<K, V, E>) -> Set<K, E> {
+    m.keys()
+}
+
+logic fn key_set_membership<K: Logical, V: Logical, E: Equiv<K>>(m: Map<K, V, E>, k: K)
+    -> @iff(m.keys().contains(k), m.get(k) !== Maybe::None) {
+    map::keys_membership(m, k)
+}

@@ -1,0 +1,13 @@
+//~ question: May a body name the final value of a live local reference only inside a proof?
+//~ spec: contracts.final, contracts.final.pending
+//~ rfc: 0002
+
+fn reflexive() -> u32 {
+    let mut n: u32 = 0;
+    let r = &mut n;
+    let same: @(final!(r) === final!(r)) = _;
+    *r = 8;
+    n
+}
+
+//~ run: reflexive() => 8

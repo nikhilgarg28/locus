@@ -1,0 +1,14 @@
+//~ question: Can Same provide an explicit equivalence for an arbitrary logical type without defining that type's ==?
+//~ spec: traits.equivalence.same, traits.equivalence
+//~ rfc: 0006
+
+use locus::logic::{PartialEquiv, Equiv, Same};
+
+logic fn exact_relation<K: Logical>(a: K, b: K)
+    -> @iff(<Same as PartialEquiv<K>>::equiv(a, b), a === b) {
+    _
+}
+
+logic fn exact_self<K: Logical>(a: K) -> @(a === a) {
+    <Same as Equiv<K>>::refl(a)
+}

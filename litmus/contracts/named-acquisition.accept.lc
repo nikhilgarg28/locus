@@ -1,0 +1,33 @@
+//~ question: May one named acquisition lend an invariant-read field when the call proves preservation?
+//~ spec: contracts.invariants.acquisition, contracts.invariants.no-mutable-borrow, contracts.invariants.observed, contracts.final
+//~ rfc: 0002
+
+fn first_mut(pair: &mut (u32, u32))
+    -> (x: &mut u32, @(final!(pair) === (final!(x), pair.1)))
+{
+    (&mut pair.0, _)
+}
+
+struct Tagged {
+    data: (u32, u32),
+    valid: @(data.1 == 7),
+}
+
+impl Tagged {
+    fn first(&mut self) -> (x: &mut u32, @(final!(self).data.1 == 7)) {
+        let before = logic! { snap(self.data) };
+        let shape = self.valid;
+        let r = &mut self.data;
+        let (x, loan) = first_mut(r);
+        let kept: @(final!(r).1 == 7) = _;
+        (x, _)
+    }
+}
+fn seven() -> u32 {
+    let mut tagged = Tagged { data: (0, 7), valid: _ };
+    let (x, kept) = tagged.first();
+    *x = 9;
+    tagged.data.1
+}
+
+//~ run: seven() => 7

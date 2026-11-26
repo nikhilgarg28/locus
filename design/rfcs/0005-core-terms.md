@@ -197,7 +197,7 @@ fn absurd(t: &mut Tally) {
 
 - **A proof about a final value may be bound, combined with other proofs, and returned** before the borrow ends, and a lemma may be called at one, since its arguments are part of the proof it returns. `first_mut`, which returns a `&mut` into a pair with a proof that relates the pair's final value to the reference's, needs exactly that to prove its own result.
 - **`Prop` is no exception.** A proposition is a logical value: it can be stored in a ghost field and read back. With `recover` at `Prop`, a body could store `prop!(!predicted)` through the borrow, and the proposition the borrow ends with would be its own negation, which proves `False`. RFC 0002 names this program as the liar. The first text of this RFC exempted `Prop` by its type, and a review found the hole. What a future proposition may be is what a proof proves, never a value of its own.
-- **This is sound because only proofs depend on the final value, and a proof cannot become a value:** a match on a proof produces a proof (`proofs.elimination`). So nothing that is stored through the borrow before it ends can depend on what it ends with.
+- **The restriction does not expose pending final values as independently usable data.** Proof witnesses remain inside proofs (`proofs.elimination`). RFC 0002 decision 126 allows an empty match on `@False` to return logical `!`: that has no constructor or witness to expose, and any resulting data expression still undergoes the core pending-final check. The exception supplies no runtime control flow, weakens no acquisition obligation, and must not be implemented by recovering a future value from a proof.
 - Once the borrow has ended, the value is the one the place holds, and nothing restricts it.
 
 ### When two propositions are the same
@@ -229,11 +229,124 @@ Reductions 3 and 4 apply only where every name in the function's body could be w
 
 ### Sequences
 
+**Owner-adopted foundation (I06a).** `Seq`, `Maybe`, and comparable algebraic logical library types are ordinary strictly positive inductive definitions. A finite list-shaped sequence and an optional value can be defined using the same constructs available to a program; recursive operations obey ordinary totality checks. Their laws are proved from those definitions and checked in the kernel, not introduced as extra sequence axioms. This adopts the foundation, not an exact public constructor spelling, a kernel implementation, or a representation for maps. Inductive logical data have no runtime layout or allocation cost.
+
+The existing operations below keep their meanings. In particular, an update out of range leaves the sequence unchanged. The proposed lemma library must prove bounds-sensitive read-after-update, length preservation, concatenation and splitting, and sequence extensionality (equal length plus pointwise `===` gives sequence `===`). These proofs remain work for the library; this decision does not make a proof hole or `linear` call those lemmas, does not add them to conversion, and does not assert that the spike's holes have been checked. The implementation/proof work is tracked in [standard-library](../../issues/standard-library.md). Generic `at` can discharge its impossible empty case using the adopted `unreachable(p: @False) -> !` interface of RFC 0002 decision 126.
+
 - `s.len()`; `s.get(i)`, a `Maybe` that is empty outside the sequence; `s.at(i, p)`, for a proof `p` of `i < s.len()`; and `s.update(i, v)`, which a write to an element needs. The index is a `Nat`, and only a `Nat` ([RFC 0002](0002-logical-layer.md), decision 109). An earlier revision of this RFC indexed a sequence by an `Int`.
 - **`s[i]` with no proof exists only where the element type has a default,** a term that Locus derives from the type's structure: `Int`, `Nat`, `Bool`, a sequence, a `Maybe`, a tuple or a logical struct without proof fields whose parts all have one, and the snapshot of a machine integer, a `bool`, or a struct, tuple, array, or slice built from those. A proof type, a type parameter, and an opaque snapshot have none.
 - Outside the sequence, `s[i]` is that default, and the default never converts to anything, so nothing is known of it.
 - An unrestricted `s[i]` would be unsound: the element at 0 of an empty `Seq<@False>` would be a proof of `False`. RFC 0002 had warned of this and left the operation as a placeholder.
 - A `Nat` is made from an `Int` with a proof that it is not negative. So an `Int`, such as `i - 1`, is not an index until it is made one. How that is spelled is the library's.
+
+### Finite collection sets and map keys
+
+**Owner-adopted API and equality policy (I07b, 2026-11-26).** Logical collections
+are `Set<K, E = Same>` and `Map<K, V, E = Same>`, with `E: Equiv<K>` from
+[RFC 0006](0006-traits.md#adopted-equality-domains-and-policies).
+`Map<K,V,E>::keys()` returns `Set<K,E>`: it preserves the key relation and
+returns an unordered set, not a sequence. `Same` uses built-in `===`; when
+`K: Equiv<K>`, `E=K` explicitly selects the type's own equivalence instead.
+Logical `a == b` still selects `K`'s own `PartialEquiv<K>`, never an ambient
+collection policy. The element/value types are logical; no representation is
+selected by these public type parameters.
+
+For a finite collection map its key set is finite. This does not decide a
+future general infinite-set abstraction or its name. The membership condition
+that the implementation must realize is:
+
+```rust
+iff(m.keys().contains(k), m.get(k) !== Maybe::None)
+```
+
+Membership and lookup must respect `E`: equivalent query keys have the same
+membership and `===` lookup result. A key denotes its equivalence class; a map
+cannot give conflicting values for two keys in that class. These are obligations
+on the definitions and checked lemmas, not assumed set/map axioms or new proof
+search rules. For the extensional-content sameness goal at one fixed policy,
+map values are compared by built-in `===`, not by their optional `==` or by `E`.
+A collection's own alternative `==` is separate. Two distinct nominal policy
+types give distinct collection types even if they define the same relation;
+conversion must be explicit. Changing policy can merge key classes, so a map
+conversion also needs a specified conflict treatment, which remains open.
+
+Extensional contents semantics must be proved from the chosen representation.
+`===` is never overridden. A record holding a private `Seq<K>` still retains
+its order in logical equality; privacy does not make permutations or different
+representatives the same value. I07a's `eq::funext` proves equality of functions,
+not automatically of an arbitrary record containing functions and other data.
+Predicate, quotient and normalized-data representations have different proof
+requirements and remain options, not choices made by this API.
+
+**Adopted sorted-enumeration direction.** The owner settled set methods returning
+`Seq` for appropriately ordered keys. The exact method/order-evidence interfaces
+remain open, subject to these requirements:
+
+- For `Set<K,Same>`, an order used for unique sorted enumeration must distinguish
+  exact keys: `compare(a,b) === Equal` iff `a === b`, together with the total-order
+  laws. Then the required result is the unique sorted, duplicate-free sequence
+  containing exactly the finite set's keys. This states the target theorem;
+  implementing it still needs suitable finite-support data or an approved
+  construction, not extraction of a witness from a proof.
+- A bare `K: OrdLogic` does not establish that condition. An order total modulo
+  a chosen equivalence can tie values that differ under `===`. A sequence still
+  exposes their order, so no uniqueness follows for exact keys without the
+  stronger compatibility proof.
+- For nontrivial `E`, ordering raw keys alone does not choose a canonical
+  representative of each class. The even integers under the ordinary order
+  have no least representative. Returning `Seq<K>` needs a suitable canonical
+  representative/normalization policy (total, class-invariant, and selecting a
+  member of each class) plus compatible ordering, or the API can instead return
+  a sequence of classes with an appropriate class order. Neither mechanism is
+  adopted. A hidden remembered representative is observable in a returned
+  sequence and cannot coexist with extensional `===` by fiat.
+
+[Finite map/set representation](../../issues/finite-map-set-representation.md)
+retains the representation, positivity, finite-support, quotient/choice and
+ordered-enumeration gates. The existing sequence API and proof elimination are
+unchanged. The native tables' equivalence and Eq/Hash/Ord bridges must agree with
+the selected `E`; this adds no runtime dispatch change or automatic bridge fact.
+Runtime key retention now follows the I08a convention below; actual Eq/Hash/Ord/
+`Borrow` compatibility and complete callable contracts remain separate work. The linked `.open` examples are future API/proof obligations, not
+compiler-checked programs or promises that provisional method names exist.
+
+### Runtime map key representatives
+
+**Owner-adopted library convention (I08a, 2026-11-26).** The owner agreed to
+record ordinary runtime map insertion as preserving an existing equivalent
+concrete key and replacing only its value. If the key class was absent, the
+incoming key is retained. Representative replacement is explicit, through
+remove/reinsert or a separately specified replacement operation. The latter's
+API and any atomicity guarantee are not chosen here.
+
+The abstract `Map<K,V,E>` remains classes-to-values. A separate observer of a
+runtime map's snapshot describes its retained keys/entries. Contracts for
+`get_key_value`, removal returning the entry, and runtime key iteration must
+refer to that observation; the query key or a canonical class representative
+is not a substitute for the stored key. This describes normal returns and adds
+no new unwind or borrow-restoration protocol. Iteration ordering remains a
+separate contract, not the sorted logical-Set API.
+
+The observer must be a function of information actually in the snapshot. Native
+storage derives it from its supported memory observation. Wrapped storage's
+checked or explicitly trusted contracts establish correspondence with the
+native entries, but cannot recover a distinction discarded by `Unit` plus an
+abstract class-to-value map. A wrapper can enrich its existing logical contents
+and derive both observations from them; no redundant extra field, particular
+representation, or custom snapshot override is mandated. Any native correspondence/retention fact taken on trust must be
+listed under the existing `assumed.stated` and applicable library trust entries;
+this convention introduces no implicit assumption. Key snapshot equality
+observes only the snapshot footprint and does not establish arbitrary hidden
+payload or physical identity.
+
+[The convention chapter](../../conventions/map-keys-and-observers.md) gives the
+concrete two-label example and normal-return cases: colliding insertion retains
+the first key; lookup/removal exposes it; remove/reinsert changes it; equal
+abstract maps can expose different retained keys. These are contract targets,
+not new source signatures or compiler-checked programs. Actual Eq/Hash/Ord/Borrow
+compatibility (I08b) is not adopted by this decision; the existing requirement
+that the eventual bridge match `E` remains. Complete observer and method
+contracts stay with [the library work](../../issues/standard-library.md).
 
 ### Where a snapshot is cut
 
@@ -255,8 +368,8 @@ RFC 0002 cuts a field that closes a cycle of references, so that every snapshot 
 
 - **`given(P)` searches for nothing.** It is the written form of what a hole takes from the context, and is what lets a hole expand to a term (`proofs.procedures.expand`).
 - **Expanding a hole may add a ghost `let`.** After `n += 1`, the fact in the context is about the value `n` had before, which the body can no longer spell. The expansion adds `let before = logic! { n };` where that value was current, and then writes `given(n === u32::wrap(before + 1))`. So a hole expands to a term and the names it needs, not always to a term alone.
-- **A `_` for a value may be determined by the goal.** For a call whose result is a proof, the proposition required of the call determines values as the proofs passed to it do. This assumes nothing about the goal: the term that results must still have the type required, so `eq::refl(_)` is an error where `0 === 1` is required, and so is a call whose goal and whose arguments determine two different values. So `eq::refl(_)` can be written where `final!(r) === final!(r)` is required, though the body cannot spell the value and may not bind it.
-- **One case has no form in source.** Where a term would have to write out a value that a borrow has yet to end with, and neither its arguments nor its goal determine it, the hole cannot be written out. The promise of `proofs.procedures.expand` is narrowed by that much, and only in what can be printed back into source: every accepted proof still has a complete core term that the kernel checks.
+- **A `_` for a value may be determined by the goal.** For a call whose result is a proof, the proposition required of the call determines values as the proofs passed to it do. This assumes nothing about the goal: the term that results must still have the type required, so `eq::refl(_)` is an error where `0 === 1` is required, and so is a call whose goal and whose arguments determine two different values. So `eq::refl(_)` can be written where `final!(r) === final!(r)` is required, and RFC 0002 decision 125 also permits the spelling when `r` names a live local loan. The body may still not bind the pending final value as independently stored data.
+- **A case may still have no form in source.** Where a term would have to write out a value that a borrow has yet to end with, no live local binding names that loan, and neither its arguments nor its goal determine it, the hole cannot be written out. The promise of `proofs.procedures.expand` is narrowed by that much, and only in what can be printed back into source: every accepted proof still has a complete core term that the kernel checks.
 - **A hole tries three things, in order:** a proof in scope or a fact in the context of the proposition required; `compute()`; and `linear` over all of them.
 - **`linear` has a fixed theory:**
   - equality, with equal arguments giving equal results;
@@ -289,6 +402,7 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 | `core.values` | `core/value-known-by-a-fact.accept.lc`, `core/value-name-per-version.reject.lc` |
 | `core.wrap` | `core/cast-in-range.accept.lc`, `core/wrap-written-out.accept.lc`, `models/captured-fields-wrap-written.accept.lc`, `core/cast-wraps.reject.lc`, `core/difference-may-wrap.reject.lc` |
 | `core.conversion` | `core/constant-unfolds.accept.lc`, `core/conversion-by-evaluation.accept.lc`, `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/conversion-is-not-arithmetic.reject.lc`, `core/private-body-stays-folded.reject.lc`, `core/recursive-call-stays-folded.reject.lc`, `proofs/unfold-private-body.reject.lc` |
+| `core.sequences.inductive` | `core/inductive-library-data.accept.lc`, `core/inductive-sequence-negative-position.reject.lc`, `core/index-with-a-proof.accept.lc` |
 | `core.sequences` | `core/index-with-a-proof.accept.lc`, `logical-layer/int-to-nat-with-proof.accept.lc`, `logical-layer/nat-index.accept.lc`, `core/index-without-bounds.reject.lc`, `logical-layer/int-index.reject.lc`, `logical-layer/nat-index-written-as-int.reject.lc` |
 | `core.sequences.default` | `core/predicate-used-as-its-body.accept.lc`, `core/unproved-index-of-integers.accept.lc`, `core/unproved-index-of-units.accept.lc`, `models/model-defined-for-every-snapshot.accept.lc`, `core/index-outside-is-unknown.reject.lc`, `core/unproved-index-of-proofs.reject.lc` |
 | `models.snapshots` | `logical-layer/equal-models-equal-field-models.accept.lc`, `models/captured-fields-wrap-written.accept.lc`, `models/derive-model-for-recursive-type.accept.lc`, `models/derive-model-with-cell-field.accept.lc`, `models/derived-model-equal-fields.accept.lc`, `models/derived-model-keeps-proof-holder.accept.lc`, `models/field-of-capture-and-capture-of-field.accept.lc`, `models/generic-snapshot-at-cycle.accept.lc`, `models/integer-snapshots-are-one-type.accept.lc`, `models/read-through-cut-reference.accept.lc`, `models/snapshot-of-vector-without-model.accept.lc`, `models/snapshot-through-generic-view.accept.lc`, `models/snapshot-through-reference.accept.lc`, `models/snapshot-unchanged.accept.lc`, `models/snapshots-equal-fields.accept.lc`, `traits/binding-to-a-snapshot-type.accept.lc`, `collections/vector-snapshot-is-not-a-sequence.reject.lc`, `logical-layer/equal-models-not-equal-fields.reject.lc`, `models/captured-fields-do-not-wrap.reject.lc`, `models/equal-snapshots-say-nothing-of-addresses.reject.lc`, `models/model-through-a-cut.reject.lc`, `models/snapshot-through-generic-cycle.reject.lc`, `models/snapshot-through-reference-cycle.reject.lc` |
@@ -358,7 +472,7 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 
 **Cutting only the references that close the cycle.** Then `Checked` above could sit inside a cut field with its referent intact. It needs the snapshot of a cut field to say which references are cut, which RFC 0002's rule does not. Rejecting the composition is the smaller change, and this one can follow.
 
-**Letting a body write `final!` inside a proof.** The rule on final values is now about core terms, so the ban on the spelling is no longer what keeps it sound, and lifting it would give every such proof a form in source. It would also change the outcome of a decided example, `contracts/final-reads-no-place.reject.lc`, so it is left as a question.
+**Letting a body write `final!` inside a proof.** Decided in RFC 0002, decision 125: the spelling is allowed for a live local mutable-reference loan, only inside proofs and their propositions. The core-term restriction in this RFC is unchanged. `contracts/final-reads-no-place.reject.lc` still rejects because its loan has already ended; its old signature-only diagnostic changes. Internal typing tokens do not supply future data or weaken the kernel obligation.
 
 **Widening conversion with laws of arithmetic or with facts about value names.** Then whether two types are the same would depend on a proof search, and RFC 0002's rule that a proof about one version never fits another by computation alone would go.
 
@@ -385,6 +499,8 @@ A new chapter, [Core terms](../../spec/core.md), and changes to five others.
 6. **A write through a `Box` or a held `&mut` gives the holder a new value name** (finding F3). A snapshot follows those pointers, so the referent is a part of the holder's value: `runtime.writes` and `runtime.borrows` now say so, for a write and for the end of a borrow of the referent. Eight examples, the review's two among them.
 7. **A `while` leaves with what is known after its condition's writes** (finding F7), which this RFC had left for later. `runtime.loops` says it, and that a `while let` leaves with what is known after its scrutinee was evaluated. `runtime.conditions` says that a write in a condition takes effect where it is evaluated, and that one in the right operand of `&&` or `||` is as a write in one branch of an `if`. Five examples.
 8. **`Unit` has a default** (with finding F2): `core.sequences.default` lists it, and names an abstract external snapshot, not an opaque one, among the types with none, since [RFC 0008](0008-snapshot-capture-and-views.md) made the snapshot of `Opaque<T>` `Unit`.
+
+**Partially decided by the owner in I07b on 2026-11-26:** add logical `Set<K>` and make `Map<K,V>::keys()` return it. [The API record above](#finite-collection-sets-and-map-keys) states the membership obligation and explicitly leaves the representation, proofs, enumeration, and runtime key policy open. It adds no set axioms or new spec rule before those details are specified.
 
 **Still for the owner.** Each is written into the rules and examples as proposed.
 

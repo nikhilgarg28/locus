@@ -1,0 +1,28 @@
+// Exploratory source corresponding to accept_downstream_provider.rs.
+// `std_text` is the proposed designated String/str adapter, not an implemented
+// library. Its native implementation binding is an explicit remaining gate.
+
+struct Name(String);
+
+impl BorrowSpec<str> for Name {
+    logic fn borrowed(s: Snap<Name>) -> Snap<str> {
+        std_text::bytes(s.0)
+    }
+    logic fn borrowed_valid(s: Snap<Name>, valid: @admissible::<Name>(s))
+        -> @admissible::<str>(Self::borrowed(s)) {
+        std_text::bytes_valid(s.0, _)
+    }
+}
+
+impl BorrowOperation<str> for Name {
+    fn borrow_verified<'a>(&'a self)
+        -> (q: &'a str, @(snap(*q) === Self::borrowed(snap(*self)))) {
+        let (q, same) = std_text::borrow_verified(&self.0);
+        (q, same)
+    }
+}
+
+impl ProvideBorrow<str> for Name {}
+
+// Hash/Eq/Ord are deliberately omitted. Borrowing alone proves none of their
+// laws; adding them must bind their actual native implementations too.

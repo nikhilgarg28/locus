@@ -7,7 +7,7 @@
 
 ## Question
 
-What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`). RFC 0002's decisions 80 to 83 settle how it reaches Rust's standard library: through types of its own, named by an explicit import, whose contracts are in their signatures and are assumed with `unsafe assume!` until they are verified. Decisions 113 to 118 say what a collection among them is: a struct that keeps its contents in a logical field, with contracts that speak of the elements' snapshots. What the library holds is below. Everything in this list is proposed, for this issue's RFC, and nothing in it is decided beyond those decisions.
+What Locus's library provides on top of the language core in RFC 0002 (`design/rfcs/0002-logical-layer.md`). RFC 0002's decisions 80 to 83 settle how it reaches Rust's standard library: through types of its own, named by an explicit import, whose contracts are in their signatures and are assumed with `unsafe assume!` until they are verified. Decisions 113 to 118 say what a collection among them is: a struct that keeps its contents in a logical field, with contracts that speak of the elements' snapshots. What the library holds is below. The list remains proposed except for the decisions cited here and in the log. I06 adopts ordinary inductive `Seq`/`Maybe`; the partial I07b decision adopts logical `Set<K>` and `Map<K,V>::keys() -> Set<K>`, with representation and proofs retained in [finite-map-set-representation](finite-map-set-representation.md).
 
 ### 1. Logical types
 
@@ -17,7 +17,7 @@ These are erased, and exist only to state and prove facts. `Int` is the language
 - **Collections:** `Seq<T>`, `Set<T>`, `Map<K, V>`, and `Multiset<T>`, which is what "the same items in another order" is stated with.
 - **Sums:** `Maybe<T>`, and a two-sided one for `Result`, as the models of `Option` and `Result`.
 - **Text:** characters, and strings as sequences.
-- For each: its definition, its positivity in each type argument (`Seq` and `Maybe` are positive, and a set, as a predicate, is not), and a stated correspondence for any native acceleration.
+- For each: its definition, its positivity in each type argument (`Seq` and `Maybe` are positive; `Set`/`Map` variance depends on the still unselected representation, and a predicate representation is not positive in its argument), and a stated correspondence for any native acceleration.
 - **Fixed-width arithmetic:** what wrapping, saturating, and bitwise operations mean on `Int`, so that machine arithmetic has something to be equal to; and `div_euclid` and `rem_euclid`.
 - **Indexing of sequences:** the index type, what an index outside the sequence means, and the bounds proof needed when elements might not exist.
 
@@ -325,3 +325,89 @@ The trust model gains `trusted.library-laws`: that each adapter agrees with the 
 ### 2026-11-24, snapshot/view reconciliation proposed
 
 [RFC 0008](../design/rfcs/0008-snapshot-capture-and-views.md) replaces implicit models with compiler-generated snapshot capture and ordinary explicit views. `Opaque<T>` and `UnsafeCell<T>` snapshot to `Unit`; field-erasure attributes are removed. Collection wrappers keep logical contents with generated conditional storage and offer native-shaped and checked methods. Existing unresolved lowering, loan, coherence, and bridge-fact questions remain open; [snapshot-view-reconciliation](snapshot-view-reconciliation.md) links the validation gates. This update does not rewrite the earlier log or mark an RFC accepted.
+
+### 2026-11-25, owner adopts the restricted hashing architecture; PR #26
+
+[RFC 0007](../design/rfcs/0007-provided-trait-implementations.md#adopted-i04-traces-and-the-standard-hash-bridge)
+now fixes the I04 direction: hash traces, a write-only sink, direct designated
+standard leaf adapters with shared events, and scoped checked hashing with
+designated lawful builders. It names observation, emission/equality,
+interpretation and builder facts under the existing trust categories. Runtime
+wrapper assumptions remain explicit and listed. Standard map internals must
+be connected to the certified digest route, not assumed to call Locus's helper.
+The architecture does not supply container snapshots or certify arbitrary
+Hash/BuildHasher/Borrow implementations. Borrow compatibility is required now;
+its API, container and tuple adapters, slice_trace, and user-proved hashers are
+retained in [checked-hashing-followups](checked-hashing-followups.md).
+
+
+### 2026-11-25, owner adopts I06a and I06b; PR #26
+
+The owner chose ordinary inductive definitions for `Seq`, `Maybe` and comparable
+algebraic logical library types, with total operations and kernel-checked lemmas:
+
+> Yes I agree with seq and other such types being regular inductive types
+
+RFC 0005's sequence section and `core.sequences.inductive` record this foundation.
+The read/update/length and extensionality lemmas still need actual proofs; the
+spike is an unverified workload. Constructor visibility, a kernel backend and
+`Map` representation are not chosen by this decision. No sequence-specific axiom
+is added. Existing `get`, `at`, out-of-range update and unproved-index behavior
+are retained.
+
+RFC 0002 decision 126 records the chosen logical `unreachable(p: @False) -> !`
+interface for impossible branches. This settles the narrow proof-elimination
+exception without extracting existential witnesses. Generic never-type bounds
+and its checking/export representation remain in
+[logical-never-lowering](logical-never-lowering.md); the existing unevaluated
+constant question is not closed. This record implements the owner's request to
+commit the decisions, not a claim that a Locus compiler or kernel accepted them.
+
+### 2026-11-26, owner adopts an unordered logical key-set API; PR #26
+
+The owner chose a logical `Set<K>` and `Map<K,V>::keys() -> Set<K>` instead of
+returning a `Seq<K>`. RFC 0005 records the membership obligation
+`iff(m.keys().contains(k), m.get(k) !== Maybe::None)` and the finite key-set scope.
+The implementation must prove it from its definitions; no axiom is added.
+
+[Finite map/set representation](finite-map-set-representation.md) retains I07b's
+unselected representation, extensionality proof and enumeration machinery.
+It does not turn private sequence storage into unordered `===`, expose a witness
+from a proof, choose an arbitrary key order, or decide general infinite sets.
+Runtime key equivalence and representative policy are still separate questions.
+The API is chosen; the linked source obligations remain `.open` until the
+representation and actual library proof interfaces are specified.
+
+### 2026-11-26, owner adopts generalized equality policies
+
+RFC 0006 now records `PartialEquiv<T = Self>` and `Equiv<T = Self>`: the type's
+own relation supplies logical `==`, and a logical policy `E: Equiv<K>` supplies
+collection key identity. RFC 0005 generalizes the public API to
+`Set<K,E=Same>` and `Map<K,V,E=Same>`, with policy-preserving `keys()`. `Same`
+uses `===`; values in map content sameness still use `===`. The separate
+`Equivalence` trait is not adopted. Native Eq/Hash/Ord bridges must match `E`.
+
+The requested sorted enumeration methods need stronger conditions than an
+arbitrary total comparison modulo an equivalence: exact-key separation for
+`Same`, or canonical representatives/normalization or ordered class values for
+nontrivial `E`. The existing representation issue holds those interfaces and
+proofs open. This adds no quotient, choice API, float representation or capture
+change.
+
+### 2026-11-26, owner settles I08a retained-key convention
+
+The owner said, "Agree, let’s record it settled and move on" to ordinary map
+insertion preserving an existing equivalent key and replacing only its value.
+RFC 0005 records the convention, and
+[map keys and observers](../conventions/map-keys-and-observers.md) gives the
+collision, lookup, entry-removal, explicit replacement and abstraction cases.
+Logical Map remains classes-to-values; key-returning APIs need a separate
+snapshot-derived retained-entry observation.
+
+Native storage derives it from available storage snapshots. Wrapped contracts
+must establish native correspondence, and the snapshot must actually retain
+enough information: Unit plus a quotient-only map cannot recover a concrete
+representative. Enriching existing logical contents is one route, without a
+mandated extra field or new ghost-restoration protocol. The record adds no
+trusted observer axiom or compiler rule. Actual Eq/Hash/Ord/Borrow compatibility
+and the final observer/method contracts remain I08b/library work.

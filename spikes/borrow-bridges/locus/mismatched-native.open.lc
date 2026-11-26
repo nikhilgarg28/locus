@@ -1,0 +1,22 @@
+// Candidate rejection under a real native binding check. Rust accepts the
+// analogous program; see correct_operation_plus_borrow_bound_does_not_bind_actual_impl.
+struct Split { intended: String, actual: String }
+
+impl BorrowSpec<str> for Split {
+    logic fn borrowed(s: Snap<Split>) -> Snap<str> {
+        std_text::bytes(s.intended)
+    }
+    // Validity lemma omitted in this negative sketch.
+}
+impl BorrowOperation<str> for Split {
+    fn borrow_verified<'a>(&'a self)
+        -> (q: &'a str, @(snap(*q) === Self::borrowed(snap(*self)))) {
+        std_text::borrow_verified(&self.intended)
+    }
+}
+impl std::borrow::Borrow<str> for Split {
+    fn borrow(&self) -> &str { &self.actual }
+}
+
+// Having both bounds must not certify native map lookup. The independent
+// operation is correct; native Borrow has a different observation.

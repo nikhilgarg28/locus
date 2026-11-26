@@ -1,0 +1,31 @@
+; benchmark generated from python API
+(set-info :status unknown)
+(declare-fun length () Int)
+(declare-fun entry_initialized () (Array Int Bool))
+(declare-fun capacity () Int)
+(declare-fun index () Int)
+(assert
+ (let (($x33 (forall ((probe Int) )(let (($x30 (>= probe 0)))
+ (let (($x31 (and $x30 (< probe capacity))))
+ (=> $x31 (= (select entry_initialized probe) (< probe length))))))
+ ))
+ (let (($x17 (<= length capacity)))
+ (let (($x16 (>= length 0)))
+ (and $x16 $x17 $x33)))))
+(assert
+ (>= index 0))
+(assert
+ (< index length))
+(assert
+ (let (($x64 (forall ((probe Int) )(let (($x26 (< probe length)))
+(let ((?x41 (store entry_initialized index false)))
+(let (($x50 (select ?x41 probe)))
+(let (($x30 (>= probe 0)))
+(let (($x31 (and $x30 (< probe capacity))))
+(=> $x31 (= $x50 $x26))))))))
+))
+(let (($x17 (<= length capacity)))
+(let (($x16 (>= length 0)))
+(let (($x87 (and $x16 $x17 $x64)))
+(not $x87))))))
+(check-sat)

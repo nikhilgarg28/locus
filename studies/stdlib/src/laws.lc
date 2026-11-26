@@ -1,0 +1,73 @@
+// User traits; no compiler magic. Key projection may omit irrelevant fields.
+pub trait KeySpec: Snapshot {
+    type Key: Logical;
+    logic fn key(s: Snap<Self>) -> Self::Key;
+}
+pub trait LawfulEq: KeySpec {
+    fn eq_checked(&self, other: &Self)
+        -> (same: bool, @(iff(same, Self::key(snap(self)) === Self::key(snap(other)))));
+}
+pub trait TotalOrd: LawfulEq {
+    logic fn le(a: Self::Key, b: Self::Key) -> Prop;
+    logic fn refl(a: Self::Key) -> @(Self::le(a,a));
+    logic fn trans(a: Self::Key,b: Self::Key,c: Self::Key,
+        ab: @(Self::le(a,b)),bc: @(Self::le(b,c))) -> @(Self::le(a,c));
+    logic fn total(a: Self::Key,b: Self::Key) -> @(Self::le(a,b)||Self::le(b,a));
+    logic fn antisym(a: Self::Key,b: Self::Key,
+        both: @(Self::le(a,b)&&Self::le(b,a))) -> @(a === b);
+    fn cmp_checked(&self, other: &Self)
+        -> (c: std::cmp::Ordering,
+            @(match c {
+                std::cmp::Ordering::Less => Self::le(Self::key(snap(self)),Self::key(snap(other)))
+                    && Self::key(snap(self)) !== Self::key(snap(other)),
+                std::cmp::Ordering::Equal => Self::key(snap(self)) === Self::key(snap(other)),
+                std::cmp::Ordering::Greater => Self::le(Self::key(snap(other)),Self::key(snap(self)))
+                    && Self::key(snap(self)) !== Self::key(snap(other)),
+            }));
+}
+pub trait HashEq: LawfulEq {
+    logic fn code(k: Self::Key) -> Nat;
+    logic fn code_range(k: Self::Key) -> @(Self::code(k) < 18446744073709551616);
+    fn hash_checked(&self) -> (h: u64, @(h === Self::code(Self::key(snap(self)))));
+}
+// Hash collisions ARE permitted. code equality does not imply key equality.
+// A fixed checked hash is enough for this native table; production randomized
+// hashing needs a seed/state-indexed law, held fixed throughout a table's life.
+
+// Native B-tree: K: TotalOrd. Native hash table: K: HashEq.
+// std wrappers additionally need std::Ord or std::Eq + std::Hash AND a bridge
+// to the SAME KeySpec projection. A method's forwarding body alone does not
+// export a contract for arbitrary std calls. Those bridges live in 04-std-api.lc.
+
+impl KeySpec for u32 {
+    type Key = Nat;
+    logic fn key(s: Snap<u32>) -> Nat { s }
+}
+impl LawfulEq for u32 {
+    #[verified]
+    fn eq_checked(&self,other:&u32)
+        -> (r:bool,@(iff(r,*self === *other))) {(*self == *other,_)}
+}
+impl TotalOrd for u32 {
+    logic fn le(a:Nat,b:Nat)->Prop {a<=b}
+    logic fn refl(a:Nat)->@(a<=a) {_}
+    logic fn trans(a:Nat,b:Nat,c:Nat,ab:@(a<=b),bc:@(b<=c))->@(a<=c) {_}
+    logic fn total(a:Nat,b:Nat)->@(a<=b||b<=a) {_}
+    logic fn antisym(a:Nat,b:Nat,both:@(a<=b&&b<=a))->@(a===b) {_}
+    #[verified]
+    fn cmp_checked(&self,other:&u32)
+        -> (c:std::cmp::Ordering,@(match c {
+            std::cmp::Ordering::Less=>*self<*other,
+            std::cmp::Ordering::Equal=>*self===*other,
+            std::cmp::Ordering::Greater=>*other<*self,
+        }))
+    { if *self<*other {(std::cmp::Ordering::Less,_)}
+      else if *self>*other {(std::cmp::Ordering::Greater,_)}
+      else {(std::cmp::Ordering::Equal,_)} }
+}
+impl HashEq for u32 {
+    logic fn code(k:Nat)->Nat { k % 18446744073709551616 }
+    logic fn code_range(k:Nat)->@(Self::code(k)<18446744073709551616) {_}
+    #[verified]
+    fn hash_checked(&self)->(h:u64,@(h===Self::code(*self))) {(*self as u64,_)}
+}

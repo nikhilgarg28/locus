@@ -1,0 +1,9 @@
+// Snapshot adequacy failure, not a request for a snapshot override.
+struct Hidden { raw: Opaque<String> }
+
+// Snap<Hidden> contains only raw: Unit. Hidden("alice") and Hidden("bob")
+// therefore have the same snapshot but their real borrowed str values differ.
+// No pure `borrowed: Snap<Hidden> -> Snap<str>` can satisfy both results.
+// A wrapper must retain sufficient logical contents, expose a coarser borrowed
+// observation, or omit this contract. A trusted adapter cannot repair an
+// inconsistent pure-function contract by asserting it.

@@ -1,0 +1,28 @@
+//~ question: Does a named acquisition remain valid when its callee panics instead of returning normally?
+//~ spec: contracts.invariants.acquisition, contracts.invariants.acquisition-unwind, proofs.partial
+//~ rfc: 0002
+
+fn first_mut(pair: &mut (u32, u32))
+    -> (x: &mut u32, @(final!(pair) === (final!(x), pair.1)))
+{
+    (&mut pair.0, _)
+}
+
+struct Tagged {
+    data: (u32, u32),
+    valid: @(data.1 == 7),
+}
+
+fn panics(pair: &mut (u32,u32))
+    -> (x: &mut u32, @(final!(pair).1 == 7))
+{ panic!("acquisition"); }
+fn acquire(owner: &mut Tagged) -> &mut u32 {
+    let old = owner.valid;
+    let r = &mut owner.data;
+    let (x, relation) = panics(r);
+    let kept: @(final!(r).1 == 7) = relation;
+    x
+}
+// Execution aborts if this call is reached under panic=unwind. The subprocess
+// suite in spikes/mutable-loans tests abort rather than catch; no run annotation
+// is added because the litmus runner has no abort-result notation yet.

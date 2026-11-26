@@ -1,0 +1,9 @@
+//~ question: Can a logical never function use a nonreturning runtime call even with impossible input?
+//~ spec: logic.types.never, logic.code.no-runtime-calls
+//~ rfc: 0002
+
+fn stop() -> ! { panic!("stop") }
+
+logic fn wrong(p: @False) -> ! {
+    stop() //~ error: logical code cannot call a runtime function; runtime non-return is not logical elimination
+}

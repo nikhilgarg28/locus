@@ -1,0 +1,11 @@
+//~ question: Can function extensionality turn a chosen equivalence of outputs into logical sameness of functions?
+//~ spec: proofs.equality.funext
+//~ rfc: 0003
+
+logic fn same_parity(a: Nat, b: Nat) -> Prop { a % 2 === b % 2 }
+
+logic fn parity_only(f: logic fn(Nat) -> Nat, g: logic fn(Nat) -> Nat,
+                    related: @(forall |x: Nat| same_parity(f(x), g(x))))
+    -> @(f === g) {
+    eq::funext(f, g, related) //~ error: funext requires pointwise ===, not a relation that may identify different outputs
+}

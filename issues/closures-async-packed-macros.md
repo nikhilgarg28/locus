@@ -13,6 +13,11 @@ Whether and how logical code can appear in places that RFC 0001 (`design/rfcs/00
   - An observation inside one would become a capture, and change what the closure or future captures.
   - Under build mode's single lowered text, a ghost local named inside a closure is also a real capture of a zero-sized marker: by reference, unless the closure is `move`. That changes the closure's borrows, though not its layout.
   - RFC 0001 rejects logical code there for now (`observe.captures.rejected`).
+  - RFC 0007's adopted I04 hashing rule must survive later closure contracts:
+    an unwind from a sink operation cannot be caught and followed by successful
+    certified hashing with that sink's old event/state correspondence. Recovery
+    needs a deliberate protocol; today's missing closure contracts are not the
+    justification for the restriction.
 - **Packed fields.** A shared borrow of a packed field is an error in Rust, so logical code cannot observe one.
 - **How Locus's macros observe places when rustc expands them.**
   - Locus's macros are now real macros that rustc expands wherever it expands macros: inside another macro's input such as `vec[prove!(...)]`, in a macro's output, and under an alias. The examples that used to be rejected are accepted in [#10](https://github.com/nikhilgarg28/locus/pull/10): `litmus/compatibility/locus-macro-inside-rust-macro.accept.lc`, `prove-in-macro-output.accept.lc`, `prove-through-alias.accept.lc`, and `litmus/observation/macro-in-vec-reads-sibling-field.accept.lc`.
@@ -62,3 +67,13 @@ Logical code inside a closure or an async block is still rejected (`observe.capt
 The adversarial review of 2026-11-25, in its finding F8, showed a closure whose proof parameter mentions a variable that it captures and writes, called twice: in `let mut step = move |p: @(m > 0)| { let q = divide(100, m, p); m = 0; q };`, `step(ok); step(ok)` divides by zero, since `ok` is about the value `m` had where the closure was made, and the first call set the closure's own `m` to 0. Nothing said what a proposition in a closure's signature means when it reads a place that the closure captures. The review's findings were put to the owner with a recommendation for each, this one being to reject such a closure until this issue lets closures carry contracts, and the owner said: "I'm good with all your recommendations, yes." `contracts.entry-values` now says so (RFC 0002, decision 121), with `contracts/closure-proof-about-a-place-it-writes.reject.lc`, two variants that write by a call and through a captured reference, and the accepted `contracts/closure-proof-about-a-place-it-reads.accept.lc`.
 
 What stays here: which value such a proposition means when the closure does not write the place, and the place is written outside after a `move` closure copied it, as `contracts/closure-proof-about-a-copied-place-written-outside.open.lc` asks; and what a proposition in a closure's result means.
+
+### 2026-11-25, adopted hashing failure boundary; PR #26
+
+The owner adopted RFC 0007's I04 architecture. Its private HashSink supports no
+certified recovery after a delegated operation unwinds, because the underlying
+hasher may have changed before the logical event is appended. Future closure
+and catch_unwind contracts must preserve that restriction or specify and prove
+a recovery protocol. The scoped hash_one_checked owns its hasher and sink;
+generated Hash::hash owns only its sink and supplies no successful certificate
+when it unwinds. This adds no abort or no-unwind policy and does not change I01.

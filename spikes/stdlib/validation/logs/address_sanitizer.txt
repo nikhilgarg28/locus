@@ -1,0 +1,69 @@
+   Compiling locus-stdlib-spike v0.1.0 (/workspace/locus-stdlib-spike)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.51s
+     Running unittests src/lib.rs (/tmp/locus-stdlib-asan/x86_64-unknown-linux-gnu/debug/build/locus-stdlib-spike/31de4be52642b2d0/out/locus_stdlib_spike-31de4be52642b2d0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/collections.rs (/tmp/locus-stdlib-asan/x86_64-unknown-linux-gnu/debug/build/locus-stdlib-spike/228c976ad85bd613/out/collections-228c976ad85bd613)
+
+running 11 tests
+test boxes_move_without_clone_and_round_trip ... ok
+test map_equality_ignores_insertion_order ... ok
+test native_map_consuming_conversion_keeps_every_value ... ok
+test native_maps_need_no_rust_ord_or_hash ... ok
+test all_hashes_collide_and_tombstones_do_not_hide_keys ... ok
+test permission_rejects_wrong_region_uninitialized_and_overwrite ... ok
+test nonclone_elements_drop_exactly_once ... ok
+test zero_sized_allocations_have_distinct_authority ... ok
+test btree_every_six_key_removal_order ... ok
+test vector_differential_traces ... ok
+test maps_differential_traces ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.56s
+
+     Running tests/interop.rs (/tmp/locus-stdlib-asan/x86_64-unknown-linux-gnu/debug/build/locus-stdlib-spike/62a084f5372d31fc/out/interop-62a084f5372d31fc)
+
+running 8 tests
+test a_law_trait_does_not_automatically_bridge_std_ord ... ok
+test canonical_key_equality_and_representative_retention ... ok
+test checked_maps_share_the_same_client ... ok
+test checked_vector_calls_and_native_sort_handoff ... ok
+test equal_keys_with_different_hashes_break_the_map_model ... ok
+test forgotten_native_drain_is_reobserved_not_assumed_preserving ... ok
+test stale_bound_receipt_is_rejected ... ok
+test btree_to_std_to_wrapped_to_native_hash ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/logical_oracles.rs (/tmp/locus-stdlib-asan/x86_64-unknown-linux-gnu/debug/build/locus-stdlib-spike/dd2c8cbc9d562560/out/logical_oracles-dd2c8cbc9d562560)
+
+running 2 tests
+test finite_map_update_remove_and_extensionality ... ok
+test sequence_update_algebra_on_small_domains ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/protocols.rs (/tmp/locus-stdlib-asan/x86_64-unknown-linux-gnu/debug/build/locus-stdlib-spike/22dff6280a72fed1/out/protocols-22dff6280a72fed1)
+
+running 11 tests
+test cells_change_payload_without_changing_root_observation ... ok
+test closed_native_handoff_restores_after_unwind ... ok
+test destructor_only_restoration_has_a_counterexample ... ok
+test mutex_poison_preserves_valid_data_and_forget_keeps_lock ... ok
+test observing_failure_cannot_leave_stale_shadow_valid ... ok
+test permission_cleanup_continues_after_one_destructor_panics ... ok
+test rc_count_unique_access_and_last_drop ... ok
+test arc_concurrent_clones_release_exactly_once ... ok
+test both_mutexes_synchronize_shared_updates ... ok
+test refcell_shared_exclusive_and_forgotten_guards ... ok
+test wrapped_vector_forgotten_guard_is_fail_closed ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests locus_stdlib_spike
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

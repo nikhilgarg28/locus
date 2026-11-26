@@ -1,0 +1,13 @@
+error[E0502]: cannot borrow `values` as immutable because it is also borrowed as mutable
+ --> /workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/named_borrow_then_owner_argument.rs:5:12
+  |
+4 |     let r = &mut values;
+  |             ----------- mutable borrow occurs here
+5 |     r.push(values.len());
+  |       ---- ^^^^^^ immutable borrow occurs here
+  |       |
+  |       mutable borrow later used by call
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0502`.

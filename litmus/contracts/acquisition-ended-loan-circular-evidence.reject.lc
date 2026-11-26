@@ -1,0 +1,12 @@
+//~ question: Does a call that retains no loan still leave the old proof field suspended until preservation is checked?
+//~ spec: contracts.invariants.acquisition
+//~ rfc: 0002
+
+fn zero(value: &mut u32) { *value = 0; }
+struct Positive { value: u32, positive: @(value > 0) }
+fn bad(owner: &mut Positive) {
+    let r = &mut owner.value;
+    zero(r);
+    // The Rust loan ended at return. Its old proof is still unavailable.
+    let kept: @(owner.value > 0) = owner.positive; //~ error: proof field `positive` remains suspended until the acquisition's preservation obligation is checked
+}

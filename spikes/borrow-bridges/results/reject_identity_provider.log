@@ -1,0 +1,13 @@
+error[E0119]: conflicting implementations of trait `Borrow<Key>` for type `Key`
+ --> /workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_identity_provider.rs:3:1
+  |
+3 | impl Borrow<Key> for Key {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: conflicting implementation in crate `core`:
+          - impl<T> Borrow<T> for T
+            where T: ?Sized;
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0119`.

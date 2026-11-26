@@ -1,0 +1,9 @@
+//~ question: Can logical never coerce to a runtime return value?
+//~ spec: logic.types.never, logic.ghost.no-runtime-control
+//~ rfc: 0002
+
+pub logic fn unreachable(p: @False) -> ! { match p {} }
+
+fn wrong(p: @False) -> u32 {
+    logic! { unreachable(p) } //~ error: logical never cannot supply an executable u32 result
+}

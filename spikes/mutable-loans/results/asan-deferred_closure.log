@@ -1,0 +1,6 @@
+COUNTEREXAMPLE_DEFERRED_CLOSURE
+
+thread 'main' (23269) panicked at rust/probes.rs:265:21:
+deferred mutation
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+OWNER_DROP_VALID=false

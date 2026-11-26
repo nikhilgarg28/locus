@@ -1,0 +1,8 @@
+//~ question: Is equality at one input enough to conclude that two logical functions are the same?
+//~ spec: proofs.equality.funext
+//~ rfc: 0003
+
+logic fn one_point(f: logic fn(Nat) -> Nat, g: logic fn(Nat) -> Nat,
+                  at_zero: @(f(0) === g(0))) -> @(f === g) {
+    eq::funext(f, g, at_zero) //~ error: funext requires a proof for every input; equality at 0 is insufficient
+}

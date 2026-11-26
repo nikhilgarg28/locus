@@ -1,0 +1,7 @@
+target/
+.deps/
+__pycache__/
+*.rmeta
+core
+core.*
+*.long-type-*.txt

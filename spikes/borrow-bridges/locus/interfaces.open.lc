@@ -1,0 +1,53 @@
+// Exploratory Locus, NOT a decided litmus example and NOT compiled.
+// `admissible::<T>` names the required snapshot-validity premise schematically;
+// its source API is unresolved. This file does not declare a new axiom.
+// BorrowOperation/ProvideBorrow are candidate names, not an adopted rename.
+
+pub trait BorrowSpec<Q: Snapshot + ?Sized>: Snapshot {
+    logic fn borrowed(s: Snap<Self>) -> Snap<Q>;
+
+    // Needed before applying Q's laws, which hold only on valid snapshots.
+    logic fn borrowed_valid(s: Snap<Self>, valid: @admissible::<Self>(s))
+        -> @admissible::<Q>(Self::borrowed(s));
+}
+
+pub trait BorrowOperation<Q: Snapshot + ?Sized>: BorrowSpec<Q> {
+    // Snapshots here describe the shared, readable observations. The reference
+    // carries Rust's lifetime; the equation carries no address/permission fact.
+    fn borrow_verified<'a>(&'a self)
+        -> (q: &'a Q, @(snap(*q) === Self::borrowed(snap(*self))));
+}
+
+pub trait ProvideBorrow<Q: Snapshot + ?Sized>: BorrowOperation<Q> {
+    // A concrete new implementation is generated in its owning crate.
+    // Existing Borrow implementations, including Borrow<T> for T, conflict.
+    impl std::borrow::Borrow<Q> for Self {
+        fn borrow(&self) -> &Q { Self::borrow_verified(self).0 }
+    }
+}
+
+pub trait BorrowEquiv<Q: Snapshot + ?Sized, EK, EQ>: BorrowSpec<Q>
+where EK: Equiv<Snap<Self>>, EQ: Equiv<Snap<Q>> {
+    logic fn preserves_and_reflects(
+        a: Snap<Self>, b: Snap<Self>,
+        va: @admissible::<Self>(a), vb: @admissible::<Self>(b)
+    ) -> @(iff(EK::equiv(a, b), EQ::equiv(Self::borrowed(a), Self::borrowed(b))));
+}
+
+pub trait BorrowHash<Q: Snapshot + HashSpec + ?Sized>: BorrowSpec<Q> + HashSpec {
+    logic fn same_trace(a: Snap<Self>, va: @admissible::<Self>(a))
+        -> @(Self::trace(a) === Q::trace(Self::borrowed(a)));
+}
+
+pub trait BorrowOrd<Q: Snapshot + OrdSpec + ?Sized>: BorrowSpec<Q> + OrdSpec {
+    logic fn same_order(a: Snap<Self>, b: Snap<Self>,
+                       va: @admissible::<Self>(a), vb: @admissible::<Self>(b))
+        -> @(Self::compare(a, b) ===
+             Q::compare(Self::borrowed(a), Self::borrowed(b)));
+}
+
+// STILL MISSING: how a generic bound admits BOTH a generated provider and a
+// designated existing native adapter while carrying implementation-bound
+// evidence through crate metadata. An ordinary public marker is forgeable;
+// the Rust probe's sealed registry blocks legitimate downstream registration.
+// No `impl NativeBorrowCertified` shortcut is introduced here.

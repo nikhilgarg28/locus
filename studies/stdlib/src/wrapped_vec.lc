@@ -1,0 +1,99 @@
+// Actual wrapper algorithm: native storage plus an erased Seq, no capacity in
+// the public model. Capacity can be exposed separately by a checked observer.
+// TRUST NATIVE-VEC: the library maintains private correspondence of raw contents
+// to `contents`. Locus cannot express/prove that relation from Opaque's Unit.
+// Explicit assumptions below are proposed trusted-library obligations, not
+// accepted facts and not proof holes silently declared solved.
+use crate::seq::{Seq,Maybe};
+use locus::Opaque;
+pub struct Vec<T> {
+    raw:Opaque<std::vec::Vec<T>>,
+    contents:Seq<Snap<T>>, // deferred carrier; runtime naming has no Snapshot bound
+}
+impl<T:Snapshot> Vec<T> {
+    pub logic fn elements(s:Snap<Self>)->Seq<Snap<T>> {s.contents}
+    #[verified]
+    pub fn empty()->(v:Self,@(Self::elements(snap(v))===Seq::Nil)) {
+        (Vec{raw:Opaque::new(std::vec::Vec::new()),contents:Seq::Nil},_)
+    }
+    #[verified]
+    pub fn len_checked(&self)->(n:usize,@(n===self.contents.len())) {
+        let n=self.raw.get_ref().len();
+        (n,unsafe assume!(n===self.contents.len())) // TRUST NATIVE-VEC
+    }
+    #[verified]
+    pub fn len(&self)->usize {self.len_checked().0}
+    #[verified]
+    pub fn push_checked(&mut self,x:T)
+        ->@(final!(self).contents===self.contents.push(snap(x)))
+    {
+        let sx=logic!{snap(x)};
+        self.raw.get_mut().push(x);
+        self.contents=logic!{self.contents.push(sx)};
+        _ // This proves the ghost update. Native correspondence remains trusted.
+    }
+    #[verified]
+    pub fn push(&mut self,x:T) {let appended=self.push_checked(x);}
+    #[verified]
+    pub fn get_checked(&self,i:usize,inside:@(i<self.contents.len()))
+        ->(x:&T,@(self.contents.get(i)===Maybe::Some(snap(x))))
+    {
+        let x=match self.raw.get_ref().get(i) {Some(x)=>x,None=>panic!("correspondence violation")};
+        (x,unsafe assume!(self.contents.get(i)===Maybe::Some(snap(x)))) // TRUST NATIVE-VEC
+    }
+    #[verified]
+    pub fn pop_checked(&mut self)->(out:Option<T>,@(match out {
+        None=>self.contents.len()==0 && final!(self).contents===self.contents,
+        Some(x)=>self.contents.len()>0
+            && self.contents.get((self.contents.len()-1).as_nat(_))===Maybe::Some(snap(x))
+            && final!(self).contents===self.contents.take((self.contents.len()-1).as_nat(_)),
+    }))
+    {
+        let before=logic!{self.contents};
+        match self.raw.get_mut().pop() {
+            None=>{let empty=unsafe assume!(before.len()==0);(None,_)},
+            Some(x)=>{
+                let last=unsafe assume!(before.len()>0
+                    && before.get((before.len()-1).as_nat(_))===Maybe::Some(snap(x)));
+                self.contents=logic!{before.take((before.len()-1).as_nat(_))};
+                (Some(x),_)
+            }
+        }
+    }
+    #[verified]
+    pub fn set_checked(&mut self,i:usize,x:T,p:@(i<self.contents.len()))
+        ->(old:T,@(self.contents.get(i)===Maybe::Some(snap(old))
+            && final!(self).contents===self.contents.update(i,snap(x))))
+    {
+        let before=logic!{self.contents};let sx=logic!{snap(x)};
+        let old=std::mem::replace(&mut self.raw.get_mut()[i],x);
+        let located=unsafe assume!(before.get(i)===Maybe::Some(snap(old)));
+        self.contents=logic!{before.update(i,sx)};
+        (old,_)
+    }
+    #[verified]
+    pub fn into_std(self)->std::vec::Vec<T> {
+        let Vec{raw,contents}=self;raw.into_inner()
+    }
+    #[verified]
+    pub fn from_std(raw:std::vec::Vec<T>)->Self {
+        // A real runtime traversal builds the ghost sequence. This does not
+        // pretend that std Vec itself has a sequence snapshot.
+        let mut contents=Seq::Nil;
+        let n=raw.len();let mut i:usize=0;
+        while i<n {
+            let item=&raw[i];
+            let sx=logic!{snap(item)};
+            contents=logic!{contents.push(sx)};
+            i+=1;
+        }
+        // TRUST NATIVE-VEC: traversal visits every initialized item in order.
+        // Its runtime reads can in principle be placed in an erased typing
+        // skeleton; this spike does not claim the chosen lowerer can do so.
+        Vec{raw:Opaque::new(raw),contents}
+    }
+}
+// NO unrestricted DerefMut. A guard whose Drop refreshes contents is insufficient:
+// mem::forget(guard) ends Rust's loan but skips the refresh. Executable harness
+// demonstrates this and a fail-closed alternative whose observation is optional.
+// The proposed always-available Locus Seq API needs actual loan-end restoration.

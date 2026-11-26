@@ -1,0 +1,49 @@
+// M09-M15. Candidate boundary cases; some functions and owners are schematic.
+
+// M09 EXPECT REJECTION: one runtime use excludes later use of the parent r.
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(i,_);
+*x = first;
+r.write_checked(j,second,_); // The call's child endpoint need not be r's endpoint.
+
+// M10 EXPECT ACCEPTANCE for shape preservation: reborrowing returned x.
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(i,_);
+let kept = prefix_after_loan(/* frozen values, final!(r), final!(x), evidence */);
+let y = &mut *x;
+*y = first;
+*x = second;
+// The acquisition's final term covers x and all these reborrows.
+
+// M11 EXPECT ACCEPTANCE for shape, no invented endpoint equation after swap.
+// This is client code after get_mut_checked established its own obligation.
+let (mut x,loan) = v.get_mut_checked(i,_);
+let mut y = &mut other;
+std::mem::swap(&mut x,&mut y);
+*x = first;  // other
+*y = second; // v's original lent element
+// Do not retarget the original loan's final term to the new target of x.
+
+// M12 REFERENCE-SLOT CLARIFICATION. One form, two explicitly named references.
+let mut reference_slot = &mut a;
+let slot_loan = &mut reference_slot;
+replace_reference(slot_loan,&mut b);
+// final!(slot_loan) names that binding's referent, i.e. the reference slot.
+// It does not syntactically select a loan by the place name reference_slot.
+// Such slots need no invariant-reading exception unless allowed by the
+// separate snapshot/reference-cut and invariant dependency rules.
+
+// M13 EXPECT REJECTION, even though Rust accepts it: r has a second runtime use.
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(r.len()-1,_);
+// Precompute the argument before binding r under the initial strict rule.
+
+// M14 RUST REJECTION: direct &mut is already active, not reserved two-phase.
+let r = &mut self.storage;
+let (x,loan) = r.borrow_mut_checked(self.storage.len()-1,_);
+
+// M15 OPEN scope gate: a loan may escape through another parameter, not a result.
+let r = &mut self.storage;
+let relation = lend_into(r, &mut output_slot);
+// One runtime use does not imply end-at-return. Account for output_slot's loan
+// lifetime, or explicitly reject this API in the first implementation.

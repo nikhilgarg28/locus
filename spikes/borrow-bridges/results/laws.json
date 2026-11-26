@@ -1,0 +1,116 @@
+{
+  "z3": "4.15.4",
+  "queries": [
+    {
+      "name": "01_matching_query_equal_trace",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "02_missing_borrow_hash",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n q = Q!val!1,\n query_equiv = [else -> True],\n key_trace = [else -> Trace!val!1],\n query_trace = [else -> Trace!val!0],\n projection = [else -> Q!val!0]]"
+    },
+    {
+      "name": "03_missing_query_equiv_hash",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n q = Q!val!1,\n query_equiv = [else -> True],\n key_trace = [else -> Trace!val!0],\n query_trace = [Q!val!1 -> Trace!val!1, else -> Trace!val!0],\n projection = [else -> Q!val!0]]"
+    },
+    {
+      "name": "04_matching_keys_one_class",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "05_missing_reflection",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n l = K!val!1,\n q = Q!val!1,\n query_equiv = [else -> True],\n key_equiv = [else -> False],\n projection = [K!val!1 -> Q!val!2, else -> Q!val!0]]"
+    },
+    {
+      "name": "06_representative_independent_match",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "07_missing_preservation",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n l = K!val!1,\n q = Q!val!1,\n query_equiv = [(Q!val!2, Q!val!1) -> False, else -> True],\n key_equiv = [else -> True],\n projection = [K!val!1 -> Q!val!2, else -> Q!val!0]]"
+    },
+    {
+      "name": "08_unbound_native_borrow",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n q = Q!val!1,\n query_equiv = [else -> True],\n key_trace = [else -> Trace!val!0],\n actual_borrow = [else -> Q!val!2],\n query_trace = [else -> Trace!val!0],\n projection = [else -> Q!val!0]]"
+    },
+    {
+      "name": "09_bound_native_borrow",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "10_equal_only_order_is_insufficient",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n l = K!val!1,\n key_cmp = [else -> -1],\n query_cmp = [else -> 1],\n projection = [K!val!1 -> Q!val!1, else -> Q!val!0]]"
+    },
+    {
+      "name": "11_full_order_preserves_branch",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "12_missing_projection_validity",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n q = Q!val!0,\n valid_key = [else -> True],\n query_equiv = [else -> True],\n key_trace = [else -> Trace!val!0],\n valid_query = [Q!val!1 -> False, else -> True],\n query_trace = [Q!val!0 -> Trace!val!1, else -> Trace!val!0],\n projection = [else -> Q!val!1]]"
+    },
+    {
+      "name": "13_with_projection_validity",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "14_equal_trace_different_builder_state",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n state2 = 2,\n state1 = 0,\n q = Q!val!0,\n key_trace = [else -> Trace!val!0],\n digest = [(2, Trace!val!0) -> 3, else -> 1],\n query_trace = [else -> Trace!val!0]]"
+    },
+    {
+      "name": "15_equal_trace_same_builder_state",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "16_tree_pruning_arbitrary_query",
+      "expected": "unsat",
+      "actual": "unsat",
+      "passed": true
+    },
+    {
+      "name": "17_missing_query_order_transitivity",
+      "expected": "sat",
+      "actual": "sat",
+      "passed": true,
+      "model": "[k = K!val!0,\n l = K!val!1,\n q = Q!val!2,\n key_cmp = [else -> -1],\n query_cmp = [(Q!val!0, Q!val!2) -> 0, else -> -1],\n query_equiv = [else -> True],\n projection = [K!val!1 -> Q!val!1, else -> Q!val!0]]"
+    }
+  ]
+}

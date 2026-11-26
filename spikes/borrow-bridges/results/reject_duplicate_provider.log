@@ -1,0 +1,13 @@
+error[E0119]: conflicting implementations of trait `Borrow<str>` for type `Local`
+  --> /workspace/locus-loans-pr/spikes/borrow-bridges/cases/reject_duplicate_provider.rs:9:1
+   |
+ 9 | provide_text_borrow!(Local);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `Local`
+10 | impl Borrow<str> for Local {
+   | -------------------------- first implementation here
+   |
+   = note: this error originates in the macro `provide_text_borrow` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0119`.

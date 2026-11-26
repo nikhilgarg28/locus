@@ -1,0 +1,12 @@
+//~ question: Must the acquisition preservation obligation be discharged before returning the loan?
+//~ spec: contracts.invariants.acquisition
+//~ rfc: 0002
+
+fn lend(value: &mut u32) -> &mut u32 { value }
+struct Positive { value: u32, positive: @(value > 0) }
+fn bad(owner: &mut Positive) -> &mut u32 {
+    let old = owner.positive;
+    let r = &mut owner.value;
+    let x = lend(r);
+    x //~ error: the acquisition's invariant-preservation obligation is not proved before this runtime return
+}

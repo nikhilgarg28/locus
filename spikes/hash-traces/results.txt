@@ -1,0 +1,32 @@
+I04 hashing probes: Rust runtime evidence only
+rustc 1.102.0-nightly (739adecd4 2026-11-24)
+
+Compiling and running protocol_counterexamples.rs
+
+running 7 tests
+test equal_borrowed_query_can_miss_when_routes_differ ... ok
+
+thread 'normal_return_trace_update_needs_an_unwind_policy' (26545) panicked at /workspace/locus-loans-pr/spikes/hash-traces/protocol_counterexamples.rs:140:9:
+after mutation
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test hasher_implementation_cannot_hide_finish ... ok
+test hash_one_override_needs_its_own_bridge_if_used ... ok
+direct ["Str(\"abc\")"]; wrapped ["Bytes([97, 98, 99])", "U8(255)"]
+test individual_hash_law_does_not_certify_an_unchecked_hash_slice_override ... ok
+test stable_only_sink_changes_string_hash_protocol ... ok
+test write_chunk_boundaries_matter ... ok
+test normal_return_trace_update_needs_an_unwind_policy ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+Compiling and running direct_delegation.rs
+
+running 2 tests
+test standard_u8_slice_hash_is_not_a_loop_of_element_hashes ... ok
+test direct_delegation_preserves_override_and_borrowed_lookup ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+PASS: 7 adversarial probes and 2 delegation/batch probes

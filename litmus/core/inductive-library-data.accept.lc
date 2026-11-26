@@ -1,0 +1,34 @@
+//~ question: May library-style finite sequence and optional data use ordinary inductive definitions and checked computation?
+//~ spec: core.sequences.inductive, logic.types.positive, logic.fn.total, core.conversion
+//~ rfc: 0005
+
+// Representative definitions, not a commitment to the public Seq constructor names.
+#[derive(Logical)]
+enum Optional<A: Logical> { None, Some(A) }
+
+#[derive(Logical)]
+enum Chain<A: Logical> { Nil, Cons(A, Chain<A>) }
+
+logic fn length<A: Logical>(xs: Chain<A>) -> Nat {
+    match xs {
+        Chain::Nil => 0,
+        Chain::Cons(_, tail) => 1 + length(tail),
+    }
+}
+
+logic fn head<A: Logical>(xs: Chain<A>) -> Optional<A> {
+    match xs {
+        Chain::Nil => Optional::None,
+        Chain::Cons(x, _) => Optional::Some(x),
+    }
+}
+
+logic fn singleton_length()
+    -> @(length(Chain::Cons(3 as Nat, Chain::Nil)) === 1) {
+    compute()
+}
+
+logic fn singleton_head()
+    -> @(head(Chain::Cons(3 as Nat, Chain::Nil)) === Optional::Some(3 as Nat)) {
+    compute()
+}

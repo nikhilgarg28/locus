@@ -1,0 +1,13 @@
+error[E0502]: cannot borrow `*r` as immutable because it is also borrowed as mutable
+ --> /workspace/locus-loans-pr/spikes/mutable-loans/rust/compile_fail/naive_final_reads_suspended.rs:8:23
+  |
+7 |     let x = &mut r[0];
+  |             --------- mutable borrow occurs here
+8 |     final_placeholder(&*r);
+  |                       ^^^ immutable borrow occurs here
+9 |     *x = 3;
+  |     ------ mutable borrow later used here
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0502`.

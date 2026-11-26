@@ -1,0 +1,9 @@
+//~ question: Can an erased logical call justify the non-return of a runtime function?
+//~ spec: logic.types.never, logic.ghost.erased
+//~ rfc: 0002
+
+pub logic fn unreachable(p: @False) -> ! { match p {} }
+
+fn wrong(p: @False) -> ! {
+    logic! { unreachable(p) } //~ error: an erased logical call does not establish executable non-return
+}

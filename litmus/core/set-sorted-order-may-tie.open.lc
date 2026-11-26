@@ -1,0 +1,11 @@
+//~ question: What stronger order evidence is required when OrdLogic can tie distinct exact keys?
+//~ issue: finite-map-set-representation
+//~ rfc: 0005
+
+use locus::logic::{Set, Seq, Same, OrdLogic};
+
+// No unconditional bound is approved here: order totality modulo an equivalence
+// need not establish compare(a,b) == Equal iff a === b. The method is provisional.
+logic fn sorted_exact<K: Logical + OrdLogic>(s: Set<K, Same>) -> Seq<K> {
+    s.to_sorted_seq()
+}

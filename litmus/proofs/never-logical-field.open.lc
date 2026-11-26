@@ -1,0 +1,9 @@
+//~ question: May a logical aggregate use never as a field type?
+//~ issue: logical-never-lowering
+//~ spec: logic.types.never
+//~ rfc: 0002
+
+#[derive(Logical)]
+struct Impossible {
+    value: !,
+}

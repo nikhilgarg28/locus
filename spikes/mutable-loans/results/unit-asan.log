@@ -1,0 +1,19 @@
+
+running 15 tests
+test tests::captured_index_denotes_original_place ... ok
+test tests::guarded_returned_loan_may_escape_through_another_parameter ... ok
+test tests::inner_and_outer_end_values_differ ... ok
+test tests::initialized_prefix_preserved_for_every_tested_element_write ... ok
+test tests::native_caller_unwind_drops_each_value_once ... ok
+test tests::native_zero_sized_element_loan ... ok
+test tests::reborrow_returned_from_call_ends_before_parent ... ok
+test tests::native_reference_forget_preserves_initialization ... ok
+test tests::native_element_drop_panic_still_cleans_remaining_values ... ok
+test tests::reference_retargeting_does_not_retarget_original_loan ... ok
+test tests::reference_slot_is_different_from_initial_referent ... ok
+test tests::rust_allows_sibling_proof_read_so_locus_must_check_it ... ok
+test tests::same_element_write_breaks_sorted_invariant ... ok
+test tests::two_disjoint_loans_can_break_one_joint_invariant ... ok
+test tests::swap_of_returned_reference_does_not_swap_loan_identity ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s

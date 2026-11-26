@@ -1,0 +1,183 @@
+// Locus libraries over explicit protocol interfaces. Unique-memory Region is
+// insufficient to implement these interfaces. Native algorithms implementing
+// their runtime behavior are in src/interior.rs and src/sharing.rs. This file
+// does NOT claim those unsafe algorithms have acquired proofs by being wrapped.
+use locus::Opaque;
+
+pub trait Invariant<T:Snapshot>{logic fn holds(x:Snap<T>)->Prop;}
+#[derive(CloneEq,Copy)]
+pub struct Certified<T:Snapshot+CloneEq+Copy,I:Invariant<T>+CloneEq+Copy>{
+    value:T, valid:@I::holds(snap(value)),
+    policy:Opaque<std::marker::PhantomData<fn()->I>>,
+}
+impl<T:Snapshot+CloneEq+Copy,I:Invariant<T>+CloneEq+Copy> Certified<T,I>{
+    #[verified]
+    pub fn new(value:T,valid:@I::holds(snap(value)))->Self{Certified{value,valid,policy:Opaque::new(std::marker::PhantomData)}}
+    #[verified]
+    pub fn read(&self)->(value:T,@I::holds(snap(value))){(self.value,_)}
+}
+
+// The explicit policy carrier keeps I present in erased Rust; proof occurrences
+// alone need not count as using a Rust type parameter. CloneEq/Copy derivation
+// here depends on the fixed Unit snapshot and forwarding traits of Opaque.
+// A concrete sealed value such as Small in 13 avoids this generic carrier gate.
+
+// Minimal extra interior primitive. It owns initialized memory, exports no
+// reference, is !Sync, and permits Copy-read and whole-value replacement.
+// Root snapshot is Unit, not its changing contents. Prototype: PCell<T>.
+pub struct InteriorSlot<T>;
+impl<T> InteriorSlot<T>{
+    #[verified] pub fn new(x:T)->Self;
+    #[verified] pub fn replace(&self,x:T)->T;
+    #[verified] pub fn copy(&self)->T where T:Copy;
+}
+pub struct Cell<T:Snapshot+CloneEq+Copy,I:Invariant<T>+CloneEq+Copy>{
+    slot:InteriorSlot<Certified<T,I>>,
+}
+impl<T:Snapshot+CloneEq+Copy,I:Invariant<T>+CloneEq+Copy> Cell<T,I>{
+    #[verified]
+    pub fn new_checked(x:T,p:@I::holds(snap(x)))->Self{Cell{slot:InteriorSlot::new(Certified::new(x,p))}}
+    #[verified]
+    pub fn get_checked(&self)->(x:T,@I::holds(snap(x))){let entry=self.slot.copy();entry.read()}
+    #[verified]
+    pub fn replace_checked(&self,x:T,p:@I::holds(snap(x)))->(old:T,@I::holds(snap(old))){
+        let old=self.slot.replace(Certified::new(x,p));old.read()
+    }
+}
+pub struct WrappedCell<T:Snapshot+CloneEq+Copy,I:Invariant<T>+CloneEq+Copy>{
+    raw:std::cell::Cell<Certified<T,I>>,
+}
+impl<T:Snapshot+CloneEq+Copy,I:Invariant<T>+CloneEq+Copy> WrappedCell<T,I>{
+    #[verified]
+    pub fn new_checked(x:T,p:@I::holds(snap(x)))->Self{WrappedCell{raw:std::cell::Cell::new(Certified::new(x,p))}}
+    #[verified]
+    pub fn get_checked(&self)->(x:T,@I::holds(snap(x))){let entry=self.raw.get();entry.read()}
+    #[verified]
+    pub fn replace_checked(&self,x:T,p:@I::holds(snap(x)))->(old:T,@I::holds(snap(old))){
+        let old=self.raw.replace(Certified::new(x,p));old.read()
+    }
+}
+// Both implementations prove a value invariant, NOT "get returns the last set".
+// An immutable ghost last_value field would be stale after mutation via an alias.
+// Strong temporal facts need a separately owned state capability, below.
+
+pub struct CellHandle<T>; // address/identity only, copyable, not permission
+pub struct CellPermit<T>; // affine runtime resource with snap(permit).value
+pub trait PermissionedCell<T:Snapshot>{
+    fn new_checked(x:T)->(cell:CellHandle<T>,permit:CellPermit<T>,
+        @(permit.cell===cell && permit.value===snap(x)));
+    fn get_checked(cell:&CellHandle<T>,permit:&CellPermit<T>,same:@(permit.cell===cell))
+        ->(x:T,@(snap(x)===permit.value)) where T:Copy;
+    fn replace_checked(cell:&CellHandle<T>,permit:&mut CellPermit<T>,x:T,
+        same:@(permit.cell===cell))->(old:T,
+            @(snap(old)===permit.value && final!(permit).value===snap(x)));
+}
+// This is implementable using a separately held Region capability; it changes
+// the programming model. Native std Cell aliases must not bypass that capability.
+
+// Shared ownership kernel: a handle carries a non-duplicable ownership share.
+// clone_share creates a new accounted share; last release destroys the payload.
+// No Weak in this first API. Arc additionally needs an atomic memory-model proof.
+pub struct Shared<T>;
+pub trait ShareProtocol<T:Snapshot>{
+    fn new_checked(x:T)->(s:Shared<T>,@(s.value===snap(x)));
+    fn clone_checked(s:&Shared<T>)->(copy:Shared<T>,@(copy.id===s.id && copy.value===s.value));
+    fn read_checked(s:&Shared<T>)->(x:&T,@(snap(x)===s.value));
+    fn release(s:Shared<T>);
+}
+pub struct Rc<T>{share:Shared<T>}
+impl<T:Snapshot> Rc<T>{
+    #[verified]
+    pub fn new_checked(x:T)->(r:Self,@(r.share.value===snap(x))){
+        let(share,new)=LocalShares::new_checked(x);(Rc{share},_)
+    }
+    #[verified]
+    pub fn clone_checked(&self)->(r:Self,@(r.share.id===self.share.id && r.share.value===self.share.value)){
+        let(share,cloned)=LocalShares::clone_checked(&self.share);(Rc{share},_)
+    }
+    #[verified]
+    pub fn get_checked(&self)->(x:&T,@(snap(x)===self.share.value)){
+        let(x,read)=LocalShares::read_checked(&self.share);(x,_)
+    }
+}
+// LocalShares and AtomicShares are REQUIRED implementations of ShareProtocol,
+// not existing Locus items. Their runtime count algorithms are PRc and PArc.
+// A library Drop hook must release the share without copying it or forging one.
+
+pub struct WrappedRc<T>{raw:Opaque<std::rc::Rc<T>>,model:Snap<T>}
+impl<T:Snapshot> WrappedRc<T>{
+    #[verified]
+    pub fn new_checked(x:T)->(r:Self,@(r.model===snap(x))){
+        let model=logic!{snap(x)};(WrappedRc{raw:Opaque::new(std::rc::Rc::new(x)),model},_)
+    }
+    #[verified]
+    pub fn clone_checked(&self)->(r:Self,@(r.model===self.model)){
+        let raw=self.raw.get_ref().clone();
+        (WrappedRc{raw:Opaque::new(raw),model:self.model},_)
+        // TRUST STD-RC maintains SAME stable observed payload. Snapshot equality
+        // alone does not prove allocation identity; no such promise is made here.
+    }
+    #[verified]
+    pub fn get_checked(&self)->(x:&T,@(snap(x)===self.model)){
+        let x=&**self.raw.get_ref();(x,unsafe assume!(snap(x)===self.model))
+    }
+}
+
+// RefCell and Mutex expose an active guard, never an immutable "current value"
+// snapshot of an unheld shared cell. Guards carry access rights, not just Nat IDs.
+pub trait BorrowProtocol<T>{
+    type ReadGuard;type WriteGuard;
+    fn try_read(&self)->Option<Self::ReadGuard>;
+    fn try_write(&self)->Option<Self::WriteGuard>;
+    // Full declarations additionally tie guard lifetime to owner, state that
+    // failed borrow changes nothing, and establish exclusive/shared authority.
+}
+pub struct RefCell<T>{gate:LocalBorrowGate<T>}
+impl<T> RefCell<T>{
+    #[verified] pub fn new(x:T)->Self{RefCell{gate:LocalBorrowGate::new(x)}}
+    #[verified] pub fn try_borrow(&self)->Option<ReadGuard<'_,T>>{self.gate.try_read()}
+    #[verified] pub fn try_borrow_mut(&self)->Option<WriteGuard<'_,T>>{self.gate.try_write()}
+}
+pub struct WrappedRefCell<T>{raw:std::cell::RefCell<T>}
+impl<T> WrappedRefCell<T>{
+    #[verified] pub fn new(x:T)->Self{WrappedRefCell{raw:std::cell::RefCell::new(x)}}
+    #[verified] pub fn try_borrow(&self)->Result<std::cell::Ref<'_,T>,std::cell::BorrowError>{self.raw.try_borrow()}
+    #[verified] pub fn try_borrow_mut(&self)->Result<std::cell::RefMut<'_,T>,std::cell::BorrowMutError>{self.raw.try_borrow_mut()}
+}
+// For a sealed Certified<T,I>, both can return a checked value from the guard's
+// own invariant. Generic guard dereference needs a native access contract or an
+// understood operation: executing Deref is NOT an implicit snapshot operation.
+// Forgetting a RefMut keeps the dynamic borrow outstanding; it does not unlock.
+
+pub struct Arc<T>{share:AtomicShare<T>}
+impl<T:Snapshot+Send+Sync> Arc<T>{
+    #[verified] pub fn new(x:T)->Self{Arc{share:AtomicShares::new_checked(x).0}}
+    #[verified] pub fn clone(&self)->Self{Arc{share:AtomicShares::clone_checked(&self.share).0}}
+    #[verified] pub fn get_checked(&self)->(x:&T,@(snap(x)===self.share.value)){
+        AtomicShares::read_checked(&self.share)
+    }
+}
+pub struct WrappedArc<T>{raw:Opaque<std::sync::Arc<T>>,model:Snap<T>}
+impl<T:Snapshot+Send+Sync> WrappedArc<T>{
+    #[verified] pub fn new(x:T)->Self{let model=logic!{snap(x)};WrappedArc{raw:Opaque::new(std::sync::Arc::new(x)),model}}
+    #[verified] pub fn clone_checked(&self)->(r:Self,@(r.model===self.model)){
+        (WrappedArc{raw:Opaque::new(self.raw.get_ref().clone()),model:self.model},_)
+    }
+    #[verified] pub fn get_checked(&self)->(x:&T,@(snap(x)===self.model)){
+        let x=&**self.raw.get_ref();(x,unsafe assume!(snap(x)===self.model))
+    }
+}
+pub struct Mutex<T>{gate:AtomicLockGate<T>}
+impl<T> Mutex<T>{
+    #[verified] pub fn new(x:T)->Self{Mutex{gate:AtomicLockGate::new(x)}}
+    #[verified] pub fn lock(&self)->LockResult<LockGuard<'_,T>>{self.gate.acquire()}
+}
+pub struct WrappedMutex<T>{raw:std::sync::Mutex<T>}
+impl<T> WrappedMutex<T>{
+    #[verified] pub fn new(x:T)->Self{WrappedMutex{raw:std::sync::Mutex::new(x)}}
+    #[verified] pub fn lock(&self)->std::sync::LockResult<std::sync::MutexGuard<'_,T>>{self.raw.lock()}
+}
+// OPEN PROTOCOL, not omitted runtime algorithm: AtomicLockGate must transfer
+// protected permissions on acquire/release and establish happens-before. Poison
+// cannot excuse exposing invalid proof fields. Storing a sealed invariant value
+// avoids that problem; an arbitrary temporarily opened invariant needs more.

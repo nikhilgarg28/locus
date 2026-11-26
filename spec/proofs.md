@@ -21,7 +21,7 @@ A match on a proof of a declared proposition covers every one of its arms, and e
 ## Proofs
 
 r[proofs.elimination]
-A match on a proof produces a proof. A witness inside a proof never becomes a logical or runtime value.
+A match on a proof produces a proof, except for an empty match on a proof of `False` in logical code. That empty match may produce logical `!`, which coerces to the expected logical result type ([`logic.types.never`](logical-layer.md#logical-types)). The library exposes this elimination as `pub logic fn unreachable(p: @False) -> ! { match p {} }`. Its argument must be a checked proof, including a checked proof hole; merely writing `unreachable` establishes no contradiction. A witness inside a proof never becomes a logical or runtime value: the exception selects no constructor or witness and gives no elimination of `exists` into data. Pending final values remain subject to [`contracts.final.pending`](contracts.md#values-in-a-signature).
 
 r[proofs.partial]
 A proof that a runtime function returns needs to hold only when the function returns. A runtime function that never returns needs no proof of its result.
@@ -56,6 +56,9 @@ What a hole or a procedure finds is a proof term with no hole and no procedure c
 
 r[proofs.equality]
 The equality functions take proofs of `===` between core terms of one type, and of no other equality. For a proof `e` of `a === b`: `e.symm()` proves `b === a`; `e.then(f)`, for a proof `f` of `b === c`, proves `a === c`; `eq::congr(g, e)`, for a logic function `g` whose parameter has the type of `a`, proves `g(a) === g(b)`; and `h.rewrite(e)`, for a proof `h`, proves the proposition of `h` with every occurrence of the core term `a` replaced by `b`, without capturing a bound variable. A `rewrite` that finds no occurrence is an error. `eq::refl(a)` proves `a === a`. On runtime values, `a === b` is an equality of snapshots and rewrites those snapshot terms, including occurrences in retained field projections. Equality of explicitly called views rewrites only those view terms ([`core.elaboration`](core.md)).
+
+r[proofs.equality.funext]
+For `A: Logical` and `B: Logical`, and pure logical functions `f` and `g` of the same type `logic fn(A) -> B`, `eq::funext(f, g, pointwise)` proves `f === g` when `pointwise` proves `forall |x: A| f(x) === g(x)`. It requires logical sameness of results for every argument, not equality at selected inputs or a user-defined relation between results. Its result is ordinary `===` evidence usable by `proofs.equality`, including through higher-order logical observers. This is an explicit theorem application checked by the kernel, not a new search procedure: it does not extend conversion, `compute`, `linear`, or proof-hole search. It applies to logical function values only, and establishes no equality of runtime function pointers, closures, their captures, effects, or code identities. This generic API does not settle whether `!` meets these bounds; the gate in `logic.types.never` remains.
 
 r[proofs.unfold]
 `eq::unfold(f)` proves the defining equation of the logic function `f`: for every argument, `f` of it is the body of `f` with the parameter replaced by it. It unfolds one layer. A declared proposition has no defining equation. `eq::unfold(f)` is available where conversion would unfold a body like `f`'s: where every name in the body could be written at the point of the call ([`core.conversion`](core.md)). Elsewhere `f` is known by the lemmas and the contracts that its module provides.

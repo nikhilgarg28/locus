@@ -1,0 +1,18 @@
+//~ question: Can a future invariant extracted before acquisition certify its own preservation?
+//~ spec: contracts.invariants.acquisition
+//~ spec: contracts.final
+//~ rfc: 0002
+
+fn zero(value: &mut u32) { *value = 0; }
+struct Positive { value: u32, positive: @(value > 0) }
+fn bad(mut owner: Positive) -> Positive {
+    let parent = &mut owner;
+    // Snapshots retain proof fields. This is future evidence, not an entry fact.
+    let circular: @(final!(parent).value > 0) = final!(parent).positive;
+    let r = &mut parent.value;
+    zero(r);
+    // The parent loan ends with this current value. Naming the proof earlier,
+    // or hiding its projection behind a lemma, cannot make it entry evidence.
+    let kept: @(owner.value > 0) = circular; //~ error: preservation depends on the affected owner's pending-final invariant rather than independent entry evidence or a callee guarantee
+    owner
+}
